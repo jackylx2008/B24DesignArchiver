@@ -47,31 +47,30 @@ def main() -> None:
     worker.start()
     logger.info("B24 设计变更页面：%s；共 %d 条记录", url, len(state.records))
 
-    if args.no_ui:
-        webbrowser.open(url)
-        try:
-            worker.join()
-        except KeyboardInterrupt:
-            pass
-    else:
-        import tkinter as tk
-        from tkinter import ttk
+    try:
+        if args.no_ui:
+            webbrowser.open(url)
+            try:
+                worker.join()
+            except KeyboardInterrupt:
+                pass
+        else:
+            import tkinter as tk
+            from tkinter import ttk
 
-        window = tk.Tk()
-        window.title("B24 设计变更归档")
-        window.geometry("400x190")
-        window.resizable(False, False)
-        frame = ttk.Frame(window, padding=20)
-        frame.pack(fill="both", expand=True)
-        ttk.Label(frame, text=f"已读取 {len(state.records)} 条 B24 变更", font=("Microsoft YaHei UI", 13)).pack(pady=(4, 16))
-        ttk.Button(frame, text="打开变更台账", command=lambda: webbrowser.open(url)).pack(fill="x", pady=4)
-        ttk.Label(frame, text="关闭此窗口将停止本地服务").pack(pady=10)
-        try:
+            window = tk.Tk()
+            window.title("B24 设计变更归档")
+            window.geometry("400x190")
+            window.resizable(False, False)
+            frame = ttk.Frame(window, padding=20)
+            frame.pack(fill="both", expand=True)
+            ttk.Label(frame, text=f"已读取 {len(state.records)} 条 B24 变更", font=("Microsoft YaHei UI", 13)).pack(pady=(4, 16))
+            ttk.Button(frame, text="打开变更台账", command=lambda: webbrowser.open(url)).pack(fill="x", pady=4)
+            ttk.Label(frame, text="关闭此窗口将停止本地服务").pack(pady=10)
             window.mainloop()
-        finally:
-            window.destroy()
-    server.shutdown()
-    server.server_close()
+    finally:
+        server.shutdown()
+        server.server_close()
 
 
 if __name__ == "__main__":
