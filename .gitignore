@@ -9,3 +9,4 @@ common.env
 local_settings.json
 config.yaml
 LOCAL_AI_RUNTIME_SETUP.md
+tmp/

@@ -96,7 +96,7 @@ class ArchiveState:
                 if len(available) > 1:
                     raise ValueError(f"找到 {len(available)} 份 PDF，请打开该条目并选择要合并的文件")
                 selected_pdfs = list(available)
-            if not selected_pdfs or not set(selected_pdfs).issubset(available):
+            if not selected_pdfs or len(selected_pdfs) != len(set(selected_pdfs)) or not set(selected_pdfs).issubset(available):
                 raise ValueError("请选择当前变更匹配到的 PDF")
         results: list[str] = []
         if action in {"generate", "merge", "all"}:

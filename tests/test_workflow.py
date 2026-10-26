@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -19,7 +20,7 @@ from reportlab.pdfgen import canvas
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from b24_design_archiver.operations import _normalize_a4
+from b24_design_archiver.bluebeam_cli import combine_and_print_a4, find_script_engine
 from b24_design_archiver.server import ArchiveState, create_server
 
 
@@ -86,13 +87,7 @@ class WorkflowTest(unittest.TestCase):
         second = self.state.action("05-03-C2-002", "generate")
         self.assertNotEqual(Path(second["files"][0]).parent, generated.parent)
 
-    def test_pdf_normalize_and_http(self) -> None:
-        source = Path(self.state.preview("05-03-C2-001")["pdfs"][0])
-        destination = self.root / "a4.pdf"
-        _normalize_a4(source, destination)
-        page = PdfReader(destination).pages[0]
-        self.assertAlmostEqual(float(page.mediabox.width), 595.28, places=1)
-        self.assertAlmostEqual(float(page.mediabox.height), 841.89, places=1)
+    def test_http(self) -> None:
         server = create_server(self.state)
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
@@ -108,6 +103,29 @@ class WorkflowTest(unittest.TestCase):
         finally:
             server.shutdown()
             server.server_close()
+
+    @unittest.skipUnless(os.name == "nt", "Bluebeam CLI 仅支持 Windows")
+    def test_bluebeam_cli_merge_and_a4(self) -> None:
+        try:
+            find_script_engine()
+        except FileNotFoundError as exc:
+            self.skipTest(str(exc))
+        source = Path(self.state.preview("05-03-C2-001")["pdfs"][0])
+        approval = self.root / "approval.pdf"
+        draw = canvas.Canvas(str(approval), pagesize=(595, 842))
+        draw.drawString(30, 30, "approval")
+        draw.save()
+        merged = self.root / "merged.pdf"
+        a4 = self.root / "a4.pdf"
+        combine_and_print_a4([approval, source], merged, a4)
+        merged_pages = PdfReader(merged).pages
+        self.assertEqual(len(merged_pages), 2)
+        self.assertIn("approval", merged_pages[0].extract_text())
+        pages = PdfReader(a4).pages
+        self.assertEqual(len(pages), 2)
+        for page in pages:
+            self.assertAlmostEqual(float(page.mediabox.width), 595.3, delta=2)
+            self.assertAlmostEqual(float(page.mediabox.height), 841.9, delta=2)
 
     def test_multiple_pdfs_require_selection_before_writing(self) -> None:
         folder = self.root / "source" / "05-03-C2-001（水泵）"

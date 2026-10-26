@@ -13,6 +13,8 @@ from pathlib import Path
 
 from docx import Document
 
+from .bluebeam_cli import combine_and_print_a4
+
 
 def safe_name(value: str, limit: int = 96) -> str:
     value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", value).strip(" .")
@@ -180,42 +182,7 @@ def _word_to_pdf(source: Path, destination: Path) -> None:
         pythoncom.CoUninitialize()
 
 
-def _normalize_a4(source: Path, destination: Path) -> None:
-    from pdfrw import PdfReader as RwReader
-    from pdfrw.buildxobj import pagexobj
-    from pdfrw.toreportlab import makerl
-    from reportlab.lib.pagesizes import A4
-    from reportlab.pdfgen import canvas
-
-    width, height = A4
-    margin = 10 * 72 / 25.4
-    draw = canvas.Canvas(str(destination), pagesize=A4)
-    for page in RwReader(str(source)).pages:
-        obj = pagexobj(page)
-        src_width = float(obj.BBox[2] - obj.BBox[0])
-        src_height = float(obj.BBox[3] - obj.BBox[1])
-        rotate = src_width > src_height
-        content_width = src_height if rotate else src_width
-        content_height = src_width if rotate else src_height
-        scale = min(1.0, (width - 2 * margin) / content_width, (height - 2 * margin) / content_height)
-        x = (width - content_width * scale) / 2
-        y = (height - content_height * scale) / 2
-        draw.saveState()
-        if rotate:
-            draw.translate(x + content_width * scale, y)
-            draw.rotate(90)
-        else:
-            draw.translate(x, y)
-        draw.scale(scale, scale)
-        draw.doForm(makerl(draw, obj))
-        draw.restoreState()
-        draw.showPage()
-    draw.save()
-
-
 def merge_pdfs(approval_docx: Path, preview: dict, folder: Path) -> list[str]:
-    from pypdf import PdfReader, PdfWriter
-
     pdfs = [Path(name) for name in preview["pdfs"]]
     if not pdfs:
         raise ValueError("未找到对应的原始 PDF，无法合并")
@@ -223,24 +190,31 @@ def merge_pdfs(approval_docx: Path, preview: dict, folder: Path) -> list[str]:
     a4 = folder / f"{safe_name(approval_docx.stem)}_合并_A4.pdf"
     if output.exists() or a4.exists():
         raise FileExistsError("合并 PDF 已存在；为避免覆盖，请先在输出目录中处理旧成果")
-    with tempfile.TemporaryDirectory(dir=folder) as temporary_dir:
+    with tempfile.TemporaryDirectory(prefix="b24-word-") as temporary_dir:
         temporary = Path(temporary_dir)
         approval_pdf = temporary / "approval.pdf"
         _word_to_pdf(approval_docx, approval_pdf)
-        writer = PdfWriter()
-        for pdf in [approval_pdf, *pdfs]:
-            reader = PdfReader(str(pdf))
-            if not reader.pages:
-                raise ValueError(f"PDF 没有页面：{pdf}")
-            for page in reader.pages:
-                writer.add_page(page)
         merged = temporary / "merged.pdf"
-        with merged.open("wb") as stream:
-            writer.write(stream)
         normalized = temporary / "a4.pdf"
-        _normalize_a4(merged, normalized)
-        shutil.copy2(merged, output)
-        shutil.copy2(normalized, a4)
+        combine_and_print_a4([approval_pdf, *pdfs], merged, normalized)
+        staged_outputs: list[tuple[Path, Path]] = []
+        published: list[Path] = []
+        try:
+            for source, destination in ((merged, output), (normalized, a4)):
+                with tempfile.NamedTemporaryFile(dir=folder, suffix=".pdf", delete=False) as handle:
+                    staged = Path(handle.name)
+                staged_outputs.append((staged, destination))
+                shutil.copy2(source, staged)
+            for staged, destination in staged_outputs:
+                staged.rename(destination)
+                published.append(destination)
+        except OSError:
+            for destination in published:
+                destination.unlink(missing_ok=True)
+            raise
+        finally:
+            for staged, _ in staged_outputs:
+                staged.unlink(missing_ok=True)
     return [str(output), str(a4)]
 
 

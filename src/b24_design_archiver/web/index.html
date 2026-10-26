@@ -51,7 +51,7 @@
     <input id="search" type="text" placeholder="搜索编号、说明、变更内容、专业">
     <select id="status"><option value="all">全部面单状态</option><option value="yes">已完成面单</option><option value="no">未完成面单</option><option value="empty">未填写状态</option></select>
     <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button>
-    <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">合并 PDF 并排版 A4</option><option value="all">完成全部操作</option></select>
+    <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">Bluebeam 合并 PDF 并输出 A4</option><option value="all">完成全部操作</option></select>
     <button id="batch-run">处理已选</button><button id="batch-zip" class="secondary">将已选成果打总包</button>
   </section>
   <section class="panel table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>审批表编号</th><th>变更内容</th><th>面单</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></section>
@@ -63,11 +63,11 @@
   <div class="field"><h3>匹配的 PDF 文件</h3><div class="file-list" id="detail-pdfs"></div></div>
   <div class="field"><h3>匹配的 DOCX 文件</h3><div class="file-list" id="detail-docxs"></div></div>
   <div class="warning" id="detail-warning"></div>
-  </div><div class="modal-foot"><button data-action="generate">生成审批表</button><button data-action="copy">复制资料目录及文件</button><button data-action="zip">压缩资料目录</button><button data-action="merge">合并 PDF + A4</button><button data-action="all">全部处理</button><button id="open-folder" class="secondary">打开成果目录</button></div></dialog>
+  </div><div class="modal-foot"><button data-action="generate">生成审批表</button><button data-action="copy">复制资料目录及文件</button><button data-action="zip">压缩资料目录</button><button data-action="merge">Bluebeam 合并 + A4</button><button data-action="all">全部处理</button><button id="open-folder" class="secondary">打开成果目录</button></div></dialog>
 <div id="notice" role="status"></div>
 <script>
   const TOKEN = '__SESSION_TOKEN__';
-  const state = {records:[], selected:new Set(), active:null, selectedPdfs:new Set(), busy:false};
+  const state = {records:[], selected:new Set(), active:null, selectedPdfs:new Set(), pdfOrder:[], busy:false};
   const $ = id => document.getElementById(id);
   async function api(path, body) {
     const options = body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':TOKEN},body:JSON.stringify(body)};
@@ -103,16 +103,16 @@
   }
   async function load() {const data=await api('/api/records');state.records=data.records;$('output').value=data.output_root;$('workbook').textContent=`台账：${data.workbook}`;render();}
   async function showDetail(r) {
-    state.active=r;state.selectedPdfs.clear();$('detail-title').textContent=r._id;$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
+    state.active=r;state.selectedPdfs.clear();state.pdfOrder=[];$('detail-title').textContent=r._id;$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
     for(const id of ['detail-dirs','detail-pdfs','detail-docxs']) $(id).textContent='正在检索…';
     $('detail-output').textContent='';$('detail-warning').textContent='';$('detail').showModal();
     try {const p=await api('/api/preview/'+encodeURIComponent(r._id));textList($('detail-dirs'),p.directories);textList($('detail-docxs'),p.docxs);$('detail-output').textContent=p.output_folder;
-      $('detail-pdfs').replaceChildren(); if(!p.pdfs.length)$('detail-pdfs').textContent='未找到';
+      state.pdfOrder=p.pdfs;$('detail-pdfs').replaceChildren(); if(!p.pdfs.length)$('detail-pdfs').textContent='未找到';
       p.pdfs.forEach(pdf=>{const line=document.createElement('label');line.style.display='block';const check=document.createElement('input');check.type='checkbox';check.checked=p.pdfs.length===1;if(check.checked)state.selectedPdfs.add(pdf);check.onchange=()=>check.checked?state.selectedPdfs.add(pdf):state.selectedPdfs.delete(pdf);line.append(check,' ',pdf);$('detail-pdfs').append(line)});
       if(p.missing_roots.length)$('detail-warning').textContent=`以下资料源目录不存在：${p.missing_roots.join('；')}`;
     } catch(e){notify(e.message);$('detail-warning').textContent=e.message}
   }
-  async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=[...state.selectedPdfs];const result=await api('/api/action',payload);notify(`${id} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
+  async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);notify(`${id} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
   $('search').oninput=render;$('status').onchange=render;$('close').onclick=()=>$('detail').close();
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
   $('save-output').onclick=async()=>{try{busy(true);const result=await api('/api/output',{path:$('output').value});$('output').value=result.output_root;await load();notify('输出目录已保存')}catch(e){notify(e.message)}finally{busy(false)}};
