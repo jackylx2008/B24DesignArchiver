@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+.pytest_cache/
+logs/
+output/
+common.env
+.env
+*.pyc
+local_settings.json
+config.yaml
+LOCAL_AI_RUNTIME_SETUP.md

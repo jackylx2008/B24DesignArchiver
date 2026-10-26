@@ -1,0 +1,19 @@
+[flake8]
+# 设置最大行长度
+max-line-length = 120
+exclude = .git,__pycache__,.venv,.conda,.pytest_cache,.pytest_tmp,output,logs
+
+# 忽略以下检查:
+# E501 - 行长度检查
+# B001 - 不要使用裸露的 except:
+# B008 - 不要在函数调用中执行函数调用
+# BLE001 - 不要捕获通用异常 Exception
+# W503 - 二元运算符前换行（与 W504 冲突）
+# W504 - 二元运算符后换行（与 W503 冲突）
+# E203 - 冒号前空格（与 PEP8 切片建议冲突，常由黑格式化器触发）
+ignore = BLE001,W503,W504,E203,E402,E501,B001,B008
+
+# 或者使用 per-file-ignores 针对特定文件忽略
+# per-file-ignores =
+#     dxf_extractor.py:BLE001
+#     dwg_extractor.py:BLE001

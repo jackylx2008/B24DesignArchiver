@@ -1,0 +1,8 @@
+app:
+  workbook: "${CLOUDSTATION_ROOT}/path/to/B24.xlsx"
+  template_before: "${CLOUDSTATION_ROOT}/path/to/template-before.docx"
+  template_after: "${CLOUDSTATION_ROOT}/path/to/template-after.docx"
+  template_change_date: "2025-10-01"
+  output_root: "${PROJECT_ROOT}/output/B24"
+  source_directories:
+    - "${CLOUDSTATION_ROOT}/path/to/design-change-files"
