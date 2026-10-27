@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import sys
@@ -12,6 +13,7 @@ import yaml
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = PROJECT_ROOT / "config.yaml"
 VARIABLE = re.compile(r"\$\{([A-Z_]+)\}")
+LOGGER = logging.getLogger(__name__)
 
 
 def _cloudstation_root() -> str:
@@ -46,5 +48,23 @@ def load_config() -> dict:
         app = yaml.safe_load(stream)["app"]
     for key in ("workbook", "template_before", "template_after", "output_root"):
         app[key] = _expand(app[key])
-    app["source_directories"] = [_expand(value) for value in app["source_directories"]]
+    sources = [_expand(value) for value in app["source_directories"]]
+    for raw in app.get("legacy_config_files", []):
+        path = _expand(raw)
+        if not path.is_file():
+            LOGGER.warning("旧项目资料配置不存在：%s", path)
+            continue
+        with path.open(encoding="utf-8") as stream:
+            old = yaml.safe_load(stream) or {}
+        for key in ("base_directories", "pdf_directories", "docx_directories"):
+            for entry in old.get(key, []):
+                source = Path(entry).expanduser()
+                if not source.is_absolute():
+                    source = path.parent / source
+                source = source.resolve()
+                if source.is_dir():
+                    sources.append(source)
+                else:
+                    LOGGER.warning("旧项目资料目录不存在，已跳过：%s", source)
+    app["source_directories"] = list(dict.fromkeys(sources))
     return app

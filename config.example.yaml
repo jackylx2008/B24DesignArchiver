@@ -6,3 +6,6 @@ app:
   output_root: "${PROJECT_ROOT}/output/B24"
   source_directories:
     - "${CLOUDSTATION_ROOT}/path/to/design-change-files"
+  legacy_config_files:
+    - "${CLOUDSTATION_ROOT}/Python/Project/AutoZipFolder/path_config_B24.yaml"
+    - "${CLOUDSTATION_ROOT}/Python/Project/CopyZipDesktop/path_config_B24.yaml"

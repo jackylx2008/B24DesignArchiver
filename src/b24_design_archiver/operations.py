@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import tempfile
+import time
 import zipfile
 from datetime import date
 from pathlib import Path
@@ -21,11 +22,19 @@ def safe_name(value: str, limit: int = 96) -> str:
     return value[:limit].rstrip(" .") or "未命名"
 
 
+def filesystem_path(path: Path) -> Path:
+    """让 Windows 文件 API 能处理超过传统 MAX_PATH 的成果文件。"""
+    if os.name == "nt" and len(str(path)) >= 248 and not str(path).startswith("\\\\?\\"):
+        return Path("\\\\?\\" + str(path.resolve()))
+    return path
+
+
 def record_directory(record: dict, output_root: Path) -> Path:
-    change_id = safe_name(record["_id"], 48)
+    raw_id = record["变更通知单编号"]
+    change_id = safe_name(raw_id, 48)
     description = record.get("变更编号和说明", "")
-    if description.startswith(record["_id"]):
-        description = description[len(record["_id"]):].strip("（）() _-")
+    if description.startswith(raw_id):
+        description = description[len(raw_id):].strip("（）() _-")
     return output_root / safe_name(f"{change_id}_{description}" if description else change_id)
 
 
@@ -50,7 +59,7 @@ def _replace_runs(paragraph, values: dict[str, str]) -> None:
 
 def generate_approval(record: dict, config: dict, folder: Path) -> Path:
     template = _template(config, record)
-    target = folder / f"{safe_name(record['_id'])}_设计变更审批表.docx"
+    target = folder / f"{safe_name(record['变更通知单编号'])}_设计变更审批表.docx"
     if target.exists():
         return target
     values = {key: value for key, value in record.items() if not key.startswith("_")}
@@ -76,12 +85,12 @@ def generate_approval(record: dict, config: dict, folder: Path) -> Path:
 
 
 def _same_file(first: Path, second: Path) -> bool:
-    if first.stat().st_size != second.stat().st_size:
+    if filesystem_path(first).stat().st_size != filesystem_path(second).stat().st_size:
         return False
 
     def digest(path: Path) -> bytes:
         hasher = hashlib.sha256()
-        with path.open("rb") as stream:
+        with filesystem_path(path).open("rb") as stream:
             for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                 hasher.update(chunk)
         return hasher.digest()
@@ -89,17 +98,36 @@ def _same_file(first: Path, second: Path) -> bool:
 
 
 def _unique_target(target: Path, source: Path) -> Path | None:
-    if not target.exists():
+    if not filesystem_path(target).exists():
         return target
     if _same_file(source, target):
         return None
     for number in range(2, 1000):
         option = target.with_name(f"{target.stem}_{number}{target.suffix}")
-        if not option.exists():
+        if not filesystem_path(option).exists():
             return option
         if _same_file(source, option):
             return None
     raise ValueError(f"同名文件过多：{target.name}")
+
+
+def _copy_file(source: Path, target: Path) -> None:
+    """同目录暂存后发布，避免同步软件扫描时留下半写入文件。"""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=target.parent, suffix=target.suffix, delete=False) as handle:
+        staged = Path(handle.name)
+    try:
+        shutil.copy2(source, staged)
+        for attempt in range(5):
+            try:
+                filesystem_path(staged).replace(filesystem_path(target))
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.2 * (attempt + 1))
+    finally:
+        staged.unlink(missing_ok=True)
 
 
 def copy_materials(preview: dict, folder: Path) -> list[str]:
@@ -109,21 +137,24 @@ def copy_materials(preview: dict, folder: Path) -> list[str]:
         source = Path(name)
         source_hash = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:8]
         target = folder / "原始资料目录" / f"{safe_name(source.name)}_{source_hash}"
-        if target.exists():
-            continue
-        target.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=target.parent) as temporary_dir:
-            staged = Path(temporary_dir) / target.name
-            shutil.copytree(source, staged)
-            staged.replace(target)
-        copied.append(str(target))
+        new_files = 0
+        for path in source.rglob("*"):
+            if path.is_dir():
+                (target / path.relative_to(source)).mkdir(parents=True, exist_ok=True)
+            elif path.is_file():
+                destination = _unique_target(target / path.relative_to(source), path)
+                if destination is not None:
+                    _copy_file(path, destination)
+                    new_files += 1
+        if new_files:
+            copied.append(str(target))
     sources = sorted(set(preview["pdfs"] + preview["docxs"]))
     for name in sources:
         source = Path(name)
         target_dir.mkdir(parents=True, exist_ok=True)
         target = _unique_target(target_dir / safe_name(source.name, 180), source)
         if target is not None:
-            shutil.copy2(source, target)
+            _copy_file(source, target)
             copied.append(str(target))
     return copied
 

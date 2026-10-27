@@ -18,7 +18,7 @@ from .operations import (
     copy_materials, generate_approval, merge_pdfs, record_directory,
     zip_materials, zip_selected_folders,
 )
-from .records import load_records
+from .records import load_records, write_records_json
 from .sources import SourceIndex
 
 LOGGER = logging.getLogger(__name__)
@@ -33,6 +33,7 @@ class ArchiveState:
         self.lock = threading.RLock()
         self.records: list[dict] = []
         self.by_id: dict[str, dict] = {}
+        self.sync_status = {"running": False, "completed": 0, "total": 0, "copied": 0, "errors": []}
         if SETTINGS_FILE.is_file():
             try:
                 saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
@@ -43,9 +44,11 @@ class ArchiveState:
         self.reload()
 
     def reload(self) -> None:
-        self.records = load_records(self.config["workbook"])
+        records = load_records(self.config["workbook"])
+        self.records_json = write_records_json(records, self.output_root())
+        self.records = records
         self.by_id = {record["_id"]: record for record in self.records}
-        self.sources = SourceIndex(self.config["source_directories"], list(self.by_id))
+        self.sources = SourceIndex(self.config["source_directories"], [record["变更通知单编号"] for record in self.records])
 
     def output_root(self) -> Path:
         return self.config["output_root"]
@@ -61,13 +64,15 @@ class ArchiveState:
                 raise ValueError("输出目录不能与资料源目录重叠")
         if path == self.config["workbook"].parent:
             raise ValueError("输出目录不能是台账所在目录")
-        self.config["output_root"] = path
+        records_json = write_records_json(self.records, path)
         SETTINGS_FILE.write_text(json.dumps({"output_root": str(path)}, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.config["output_root"] = path
+        self.records_json = records_json
         return str(path)
 
     def get_record(self, record_id: str) -> dict:
         if record_id not in self.by_id:
-            raise KeyError(f"找不到变更编号：{record_id}")
+            raise KeyError(f"找不到条目：{record_id}")
         return self.by_id[record_id]
 
     def folder(self, record: dict) -> Path:
@@ -78,7 +83,7 @@ class ArchiveState:
 
     def preview(self, record_id: str) -> dict:
         record = self.get_record(record_id)
-        sources = self.sources.for_record(record_id)
+        sources = self.sources.for_record(record["变更通知单编号"])
         sources["output_folder"] = str(self.folder(record))
         return sources
 
@@ -104,11 +109,50 @@ class ArchiveState:
             results.append(str(approval))
         if action in {"copy", "all"}:
             results.extend(copy_materials(preview, folder))
+            self.records_json = write_records_json(self.records, self.output_root())
         if action in {"zip", "all"}:
             results.extend(zip_materials(preview, folder))
         if action in {"merge", "all"}:
             results.extend(merge_pdfs(approval, {**preview, "pdfs": selected_pdfs}, folder))
         return {"folder": str(folder), "files": results}
+
+    def start_material_sync(self) -> dict:
+        if self.sync_status["running"]:
+            return dict(self.sync_status)
+        self.sources.build()
+        records = list(self.records)
+        sources = self.sources
+        output_root = self.output_root()
+        self.sync_status = {"running": True, "completed": 0, "total": len(records), "copied": 0, "errors": []}
+
+        def run() -> None:
+            for record in records:
+                code = record["变更通知单编号"]
+                try:
+                    preview = sources.for_record(code)
+                    folder = record_directory(record, output_root)
+                    copied = copy_materials(preview, folder)
+                    with self.lock:
+                        self.sync_status["copied"] += len(copied)
+                        self.records_json = write_records_json(records, output_root)
+                except Exception as exc:
+                    LOGGER.exception("同步资料失败：%s", code)
+                    with self.lock:
+                        self.sync_status["errors"].append(f"{code}: {exc}")
+                finally:
+                    with self.lock:
+                        self.sync_status["completed"] += 1
+            with self.lock:
+                try:
+                    self.records_json = write_records_json(records, output_root)
+                except Exception as exc:
+                    LOGGER.exception("最终 JSON 同步失败")
+                    self.sync_status["errors"].append(f"JSON: {exc}")
+                finally:
+                    self.sync_status["running"] = False
+
+        threading.Thread(target=run, name="b24-material-sync").start()
+        return dict(self.sync_status)
 
 
 def create_server(state: ArchiveState) -> ThreadingHTTPServer:
@@ -151,7 +195,10 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                 if parsed.path == "/api/records":
                     with state.lock:
                         records = [{**record, "_output_exists": state.folder(record).is_dir()} for record in state.records]
-                        self._json({"records": records, "workbook": str(state.config["workbook"]), "output_root": str(state.output_root())})
+                        self._json({"records": records, "workbook": str(state.config["workbook"]), "output_root": str(state.output_root()), "records_json": str(state.records_json)})
+                elif parsed.path == "/api/sync-status":
+                    with state.lock:
+                        self._json(dict(state.sync_status))
                 elif parsed.path.startswith("/api/preview/"):
                     from urllib.parse import unquote
                     with state.lock:
@@ -179,6 +226,8 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     elif self.path == "/api/rescan":
                         state.sources.invalidate()
                         self._json({"ok": True})
+                    elif self.path == "/api/sync-materials":
+                        self._json(state.start_material_sync())
                     elif self.path == "/api/output":
                         self._json({"output_root": state.set_output_root(str(body.get("path", "")))})
                     elif self.path == "/api/action":
@@ -189,8 +238,7 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     elif self.path == "/api/open":
                         record = state.get_record(str(body.get("id", "")))
                         folder = state.folder(record)
-                        if not folder.is_dir():
-                            raise FileNotFoundError(f"成果目录尚不存在：{folder}")
+                        folder.mkdir(parents=True, exist_ok=True)
                         if os.name == "nt":
                             os.startfile(folder)
                         else:

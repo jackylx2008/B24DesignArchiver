@@ -6,23 +6,23 @@
   <title>B24 设计变更归档</title>
   <style>
     :root {font-family:"Microsoft YaHei UI","Segoe UI",sans-serif;color:#182733;background:#f4f7f9}
-    * {box-sizing:border-box} body{margin:0} button,input,select{font:inherit}
+    * {box-sizing:border-box} body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden} button,input,select{font:inherit}
     button{border:0;border-radius:8px;background:#146b70;color:#fff;padding:9px 14px;cursor:pointer}
     button:hover{background:#0f585d} button:disabled{opacity:.48;cursor:wait} button.secondary{background:#e7eef0;color:#184249}
     button.secondary:hover{background:#d7e4e7} button.danger{background:#9d4c28}
     header{background:#12363c;color:white;padding:22px max(24px,calc((100vw - 1500px)/2));display:flex;justify-content:space-between;align-items:center;gap:20px}
     h1{font-size:23px;margin:0 0 5px} header p{margin:0;color:#c7d9da;font-size:13px}
-    main{max-width:1550px;margin:auto;padding:22px 24px 50px}
+    main{width:100%;max-width:1550px;margin:auto;padding:22px 24px;flex:1;min-height:0;display:flex;flex-direction:column}
     .panel{background:white;border:1px solid #dfe8e9;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 2px 12px #1d48400a}
     .summary{display:flex;gap:14px;flex-wrap:wrap}.summary span{background:#eaf2f2;padding:8px 12px;border-radius:8px;font-size:13px}
-    .summary strong{font-size:18px;color:#0d6469}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    .config label{font-size:13px;color:#526469}.config input{min-width:370px;flex:1}
+    .summary strong{font-size:18px;color:#0d6469}
     input[type=text],select{border:1px solid #cddadb;border-radius:8px;padding:9px 10px;background:white;color:#182733}
-    .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center}.toolbar input{min-width:260px;flex:1}
-    .table-wrap{overflow:auto;max-height:calc(100vh - 315px);min-height:360px}
-    table{border-collapse:collapse;width:100%;min-width:1290px;font-size:13px} thead{position:sticky;top:0;background:#edf3f4;z-index:1}
+    .table-panel{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden;padding:0}
+    .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:16px;border-bottom:1px solid #e5ebec;flex:none}.toolbar input[type=text]{min-width:260px;flex:1}.filter-label{font-size:13px;font-weight:600;color:#526469;white-space:nowrap}
+    .table-wrap{overflow:auto;flex:1;min-height:0}
+    table{border-collapse:separate;border-spacing:0;width:100%;min-width:1180px;font-size:13px} thead th{position:sticky;top:0;background:#edf3f4;z-index:2}
     th,td{text-align:left;border-bottom:1px solid #e5ebec;padding:10px 9px;vertical-align:top} th{color:#53686e;white-space:nowrap;font-weight:600}
-    tbody tr:hover{background:#f6faf9} td.id{font-weight:700;white-space:nowrap;color:#145e63} td.content{min-width:320px;max-width:450px}
+    tbody tr:hover{background:#f6faf9} td.id{font-weight:700;white-space:nowrap} td.id a{color:#145e63;text-decoration:underline;text-underline-offset:2px} td.id a:hover{color:#0b4549} td.date{white-space:nowrap} td.content{min-width:320px;max-width:450px}
     .clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
     .muted{color:#71848a}.badge{display:inline-block;border-radius:5px;background:#e1f1ea;color:#227049;padding:3px 7px;white-space:nowrap}
     .badge.todo{background:#fff1d7;color:#8b5d08}.small{font-size:12px;padding:6px 9px;white-space:nowrap}
@@ -34,27 +34,24 @@
     .file-list{max-height:170px;overflow:auto;background:#f6f9f9;padding:9px;border-radius:7px;font-size:12px;line-height:1.7;word-break:break-all}
     .file-list div{border-bottom:1px solid #e8eeee}.field{margin-bottom:15px}.field h3{margin:0 0 6px;font-size:14px}
     .warning{color:#a04d20}.busy{opacity:.7;pointer-events:none}
-    @media(max-width:720px){header{padding:16px} main{padding:12px}.config input{min-width:100%}.table-wrap{max-height:none}}
+    @media(max-width:720px){body{height:auto;min-height:100vh;overflow:auto}header{padding:16px}main{padding:12px;display:block}.table-panel{height:70vh;min-height:520px}.toolbar{padding:12px;position:sticky;top:0;z-index:4;background:white}}
   </style>
 </head>
 <body>
 <header><div><h1>B24 设计变更归档</h1><p>一条变更，一个成果目录 · 本地台账与资料</p></div><div id="top-count">正在读取…</div></header>
 <main>
-  <section class="panel config">
-    <div class="row"><label for="output">输出根目录</label><input id="output" type="text" spellcheck="false"><button id="save-output">保存目录</button></div>
-    <div class="muted" style="font-size:12px;margin-top:8px" id="workbook"></div>
-  </section>
   <section class="panel">
     <div class="summary"><span>全部变更 <strong id="total">0</strong></span><span>当前显示 <strong id="visible">0</strong></span><span>已有成果目录 <strong id="done">0</strong></span></div>
   </section>
-  <section class="panel toolbar">
+  <section class="panel table-panel"><div class="toolbar">
     <input id="search" type="text" placeholder="搜索编号、说明、变更内容、专业">
+    <label class="filter-label" for="specialty">专业筛选</label>
+    <select id="specialty" aria-label="按专业筛选"><option value="all">全部专业</option></select>
     <select id="status"><option value="all">全部面单状态</option><option value="yes">已完成面单</option><option value="no">未完成面单</option><option value="empty">未填写状态</option></select>
-    <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button>
+    <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button><button id="sync-materials" class="secondary">同步已有资料</button>
     <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">Bluebeam 合并 PDF 并输出 A4</option><option value="all">完成全部操作</option></select>
     <button id="batch-run">处理已选</button><button id="batch-zip" class="secondary">将已选成果打总包</button>
-  </section>
-  <section class="panel table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>审批表编号</th><th>变更内容</th><th>面单</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></section>
+  </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 </main>
 <dialog id="detail"><div class="modal-head"><div><h2 id="detail-title"></h2><div class="muted" id="detail-sub"></div></div><button id="close" class="secondary">关闭</button></div><div class="modal-body">
   <div class="field"><h3>变更内容</h3><div id="detail-content" style="white-space:pre-wrap;line-height:1.65"></div></div>
@@ -79,12 +76,31 @@
   function busy(value) {state.busy=value; document.body.classList.toggle('busy',value);}
   function td(value, className='') {const cell=document.createElement('td');cell.className=className;cell.textContent=value||'';return cell;}
   function textList(element, values) {element.replaceChildren(); if(!values.length){element.textContent='未找到';return} values.forEach(value=>{const item=document.createElement('div');item.textContent=value;element.append(item)});}
+  function specialty(r) {
+    if(r['专业']) return r['专业'];
+    const code=(r['变更通知单编号']||'').toUpperCase();
+    if(code.startsWith('JZ-05')) return '精装给排水';
+    if(code.startsWith('JZ-06')) return '精装暖通';
+    if(code.startsWith('05')) return '给排水';
+    if(code.startsWith('06')) return '暖通';
+    if(code.startsWith('R20')||code.startsWith('RL20')) return '热力';
+    if(code.startsWith('251614GC')) return '燃气';
+    if(code.startsWith('泳池变更')) return '泳池设备';
+    return '';
+  }
+  function refreshSpecialties() {
+    const select=$('specialty'), previous=select.value;
+    const counts=new Map();state.records.forEach(r=>{const value=specialty(r);if(value)counts.set(value,(counts.get(value)||0)+1)});
+    const values=[...counts.keys()].sort((a,b)=>a.localeCompare(b,'zh-CN'));
+    select.replaceChildren(new Option(`全部专业（${state.records.length}）`,'all'),...values.map(value=>new Option(`${value}（${counts.get(value)}）`,value)));
+    select.value=values.includes(previous)?previous:'all';
+  }
   function filtered() {
-    const search=$('search').value.trim().toLocaleLowerCase();const status=$('status').value;
+    const search=$('search').value.trim().toLocaleLowerCase();const status=$('status').value, selectedSpecialty=$('specialty').value;
     return state.records.filter(r=>{
-      const content=[r['_id'],r['变更编号和说明'],r['变更内容三'],r['何种专业四']].join(' ').toLocaleLowerCase();
+      const content=[r['变更通知单编号'],r['变更编号和说明'],r['变更内容三'],specialty(r)].join(' ').toLocaleLowerCase();
       const flag=r['是否完成面单'];
-      return (!search||content.includes(search)) && (status==='all'||(status==='yes'&&flag==='是')||(status==='no'&&flag==='否')||(status==='empty'&&!flag));
+      return (!search||content.includes(search)) && (selectedSpecialty==='all'||specialty(r)===selectedSpecialty) && (status==='all'||(status==='yes'&&flag==='是')||(status==='no'&&flag==='否')||(status==='empty'&&!flag));
     });
   }
   function render() {
@@ -94,16 +110,18 @@
     list.forEach(r=>{
       const row=document.createElement('tr');
       const checkCell=document.createElement('td'), check=document.createElement('input');check.type='checkbox';check.checked=state.selected.has(r._id);check.addEventListener('change',()=>{check.checked?state.selected.add(r._id):state.selected.delete(r._id)});checkCell.append(check);row.append(checkCell);
-      row.append(td(r._id,'id'),td(r['变更编号和说明']),td(r['日期五']),td(r['何种专业四']),td(r['审批表编号']));
+      const idCell=td('','id'),folderLink=document.createElement('a');folderLink.href='#';folderLink.textContent=r['变更通知单编号'];folderLink.title='打开对应的成果文件夹';
+      folderLink.onclick=async e=>{e.preventDefault();try{await api('/api/open',{id:r._id});await load()}catch(error){notify(error.message)}};
+      idCell.append(folderLink);row.append(idCell,td(r['变更编号和说明']),td(r['日期五'],'date'),td(specialty(r)));
       const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=r['变更内容三'];content.append(clipped);row.append(content);
       const status=td('');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
       row.append(td(r._output_exists?'已有目录':'尚未生成','muted'));
       const action=td(''),button=document.createElement('button');button.className='small';button.textContent='查看与操作';button.onclick=()=>showDetail(r);action.append(button);row.append(action);body.append(row);
     });
   }
-  async function load() {const data=await api('/api/records');state.records=data.records;$('output').value=data.output_root;$('workbook').textContent=`台账：${data.workbook}`;render();}
+  async function load() {const data=await api('/api/records');state.records=data.records;refreshSpecialties();render();}
   async function showDetail(r) {
-    state.active=r;state.selectedPdfs.clear();state.pdfOrder=[];$('detail-title').textContent=r._id;$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
+    state.active=r;state.selectedPdfs.clear();state.pdfOrder=[];$('detail-title').textContent=r['变更通知单编号'];$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
     for(const id of ['detail-dirs','detail-pdfs','detail-docxs']) $(id).textContent='正在检索…';
     $('detail-output').textContent='';$('detail-warning').textContent='';$('detail').showModal();
     try {const p=await api('/api/preview/'+encodeURIComponent(r._id));textList($('detail-dirs'),p.directories);textList($('detail-docxs'),p.docxs);$('detail-output').textContent=p.output_folder;
@@ -112,19 +130,28 @@
       if(p.missing_roots.length)$('detail-warning').textContent=`以下资料源目录不存在：${p.missing_roots.join('；')}`;
     } catch(e){notify(e.message);$('detail-warning').textContent=e.message}
   }
-  async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);notify(`${id} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
-  $('search').oninput=render;$('status').onchange=render;$('close').onclick=()=>$('detail').close();
+  async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;notify(`${label} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
+  $('search').oninput=render;$('specialty').onchange=render;$('status').onchange=render;$('close').onclick=()=>$('detail').close();
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
-  $('save-output').onclick=async()=>{try{busy(true);const result=await api('/api/output',{path:$('output').value});$('output').value=result.output_root;await load();notify('输出目录已保存')}catch(e){notify(e.message)}finally{busy(false)}};
+  let syncWasRunning=false;
+  async function pollSync() {
+    try {
+      const result=await api('/api/sync-status');const button=$('sync-materials');
+      button.disabled=result.running;button.textContent=result.running?`同步资料 ${result.completed}/${result.total}`:'同步已有资料';
+      if(result.running){syncWasRunning=true;setTimeout(pollSync,1500)}
+      else if(syncWasRunning){syncWasRunning=false;await load();notify(`资料同步完成：${result.completed} 条，新增 ${result.copied} 项${result.errors.length?'\n失败：'+result.errors.slice(0,8).join('\n'):''}`)}
+    } catch(e){notify(e.message)}
+  }
+  $('sync-materials').onclick=async()=>{try{await api('/api/sync-materials',{});syncWasRunning=true;pollSync()}catch(e){notify(e.message)}};
   $('reload').onclick=async()=>{try{busy(true);const result=await api('/api/reload',{});state.selected.clear();await load();notify(`已重读 ${result.count} 条变更`)}catch(e){notify(e.message)}finally{busy(false)}};
   $('rescan').onclick=async()=>{try{busy(true);await api('/api/rescan',{});notify('资料索引已清除，下次查看条目时重新扫描')}catch(e){notify(e.message)}finally{busy(false)}};
   document.querySelectorAll('[data-action]').forEach(button=>button.onclick=async()=>{if(!state.active)return;try{busy(true);await runAction(state.active._id,button.dataset.action);await load()}catch(e){notify(e.message)}finally{busy(false)}});
   $('open-folder').onclick=async()=>{if(!state.active)return;try{await api('/api/open',{id:state.active._id})}catch(e){notify(e.message)}};
   $('batch-run').onclick=async()=>{const ids=[...state.selected],action=$('batch-action').value;if(!ids.length){notify('请先选择变更');return} if(!confirm(`对 ${ids.length} 条变更执行“${$('batch-action').selectedOptions[0].text}”？`))return;
-    let ok=0;const errors=[];try{busy(true);for(const id of ids){try{await api('/api/action',{id,action});ok++}catch(e){errors.push(`${id}: ${e.message}`)}} await load();notify(`完成 ${ok}/${ids.length} 条${errors.length?'\n'+errors.slice(0,8).join('\n'):''}`)}finally{busy(false)}
+    let ok=0;const errors=[];try{busy(true);for(const id of ids){try{await api('/api/action',{id,action});ok++}catch(e){const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;errors.push(`${label}: ${e.message}`)}} await load();notify(`完成 ${ok}/${ids.length} 条${errors.length?'\n'+errors.slice(0,8).join('\n'):''}`)}finally{busy(false)}
   };
   $('batch-zip').onclick=async()=>{const ids=[...state.selected];if(!ids.length){notify('请先选择变更');return}try{busy(true);const result=await api('/api/batch-zip',{ids});notify(`总包已生成：${result.file}`)}catch(e){notify(e.message)}finally{busy(false)}};
-  load().catch(e=>notify(e.message));
+  load().then(pollSync).catch(e=>notify(e.message));
 </script>
 </body>
 </html>
