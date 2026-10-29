@@ -163,12 +163,17 @@ class ArchiveState:
     def set_progress_status(self, record_id: str, status: str) -> dict:
         if record_id not in self.by_id:
             raise KeyError(f"找不到条目：{record_id}")
-        if status not in STATES:
+        if status not in STATES and status != "作废":
             raise ValueError("进展状态无效")
         data = json.loads(self.records_json.read_text(encoding="utf-8"))
         saved = next((item for item in data if item.get("_id") == record_id), None)
-        if not saved or saved.get("进展AI判定", {}).get("状态") != "进行中":
-            raise ValueError("仅 AI 判定为进行中的记录可以人工调整状态")
+        if not saved:
+            raise KeyError(f"汇总 JSON 中找不到记录：{record_id}")
+        can_mark_void = status == "作废"
+        can_restore_void = saved.get("进展状态") == "作废" and saved.get("进展状态来源") == "人工"
+        can_adjust_ongoing = saved.get("进展AI判定", {}).get("状态") == "进行中"
+        if not (can_mark_void or can_restore_void or can_adjust_ongoing):
+            raise ValueError("当前记录仅支持人工标注作废")
         return update_progress_fields(self.records_json, record_id, 进展状态=status, 进展状态来源="人工")
 
     def folder(self, record: dict) -> Path:
