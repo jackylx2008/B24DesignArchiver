@@ -119,11 +119,12 @@
     const match=rest.match(/[（(]([\s\S]*?)[）)]/);
     return match?match[1].trim():rest;
   }
+  function isVoided(r) {return r['进展状态']==='作废'}
   function refreshSpecialties() {
     const select=$('specialty'), previous=select.value;
-    const counts=new Map();state.records.forEach(r=>{const value=specialty(r);if(value)counts.set(value,(counts.get(value)||0)+1)});
+    const counted=state.records.filter(r=>!isVoided(r)),counts=new Map();counted.forEach(r=>{const value=specialty(r);if(value)counts.set(value,(counts.get(value)||0)+1)});
     const values=[...counts.keys()].sort((a,b)=>a.localeCompare(b,'zh-CN'));
-    select.replaceChildren(new Option(`全部专业（${state.records.length}）`,'all'),...values.map(value=>new Option(`${value}（${counts.get(value)}）`,value)));
+    select.replaceChildren(new Option(`全部专业（${counted.length}）`,'all'),...values.map(value=>new Option(`${value}（${counts.get(value)}）`,value)));
     select.value=values.includes(previous)?previous:'all';
   }
   function filtered() {
@@ -168,8 +169,9 @@
   }
   function render() {
     const list=filtered(), body=$('rows');body.replaceChildren();
-    $('total').textContent=state.records.length;$('visible').textContent=list.length;$('done').textContent=state.records.filter(r=>r._output_exists).length;
-    $('top-count').textContent=`${state.records.length} 条变更`;
+    const counted=state.records.filter(r=>!isVoided(r));
+    $('total').textContent=counted.length;$('visible').textContent=list.filter(r=>!isVoided(r)).length;$('done').textContent=counted.filter(r=>r._output_exists).length;
+    $('top-count').textContent=`${counted.length} 条变更`;
     list.forEach(r=>{
       const row=document.createElement('tr'),progress=completion(r);
       const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
