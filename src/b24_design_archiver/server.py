@@ -336,6 +336,25 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     elif self.path == "/api/remark":
                         remarks = state.add_remark(str(body.get("id", "")), str(body.get("text", "")))
                         self._json({"人工备注": remarks})
+                    elif self.path == "/api/batch-remark":
+                        ids = body.get("ids")
+                        text = str(body.get("text", "")).strip()
+                        if not isinstance(ids, list) or not ids:
+                            raise ValueError("请至少选择一条变更")
+                        if not all(isinstance(item, str) for item in ids):
+                            raise ValueError("变更编号格式无效")
+                        if not text:
+                            raise ValueError("请输入统一进展备注")
+                        if len(text) > 2000:
+                            raise ValueError("备注不能超过 2000 个字符")
+                        results = []
+                        for record_id in dict.fromkeys(ids):
+                            try:
+                                remarks = state.add_remark(record_id, text)
+                                results.append({"id": record_id, "ok": True, "remarks": remarks})
+                            except Exception as exc:
+                                results.append({"id": record_id, "ok": False, "error": str(exc)})
+                        self._json({"results": results})
                     elif self.path == "/api/progress-ai":
                         assessment = state.classify_record_progress(str(body.get("id", "")))
                         self._json({"进展AI判定": assessment, "进展状态": assessment["状态"], "进展状态来源": "AI"})
