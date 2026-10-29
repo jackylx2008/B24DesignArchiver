@@ -126,7 +126,7 @@ def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path
     if destination.is_file():
         for item in json.loads(destination.read_text(encoding="utf-8")):
             previous[item["_id"]] = {
-                key: item[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态") if key in item
+                key: item[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态", "进展状态来源") if key in item
             }
     exported = [write_record_json(record, output_root) for record in records]
     for item in exported:
@@ -142,7 +142,7 @@ def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path
             if status is not None:
                 item["处理情况"] = status
             item["人工备注"] = old.get("人工备注", [])
-            for key in ("进展AI判定", "进展状态"):
+            for key in ("进展AI判定", "进展状态", "进展状态来源"):
                 if key in old:
                     item[key] = old[key]
         else:

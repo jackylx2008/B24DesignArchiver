@@ -30,6 +30,7 @@
     .badge.todo{background:#fff0d7;color:#9c6d1e}.small{font-size:11px;padding:7px 10px;white-space:nowrap}
     td.completion{min-width:150px;max-width:190px}.status-list{display:flex;flex-direction:column;align-items:flex-start;gap:5px}.status-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #d8e5d9;background:#ffffffb8;color:#537264;border-radius:7px;padding:4px 6px;font-size:11px;white-space:nowrap}.status-chip.cross{border-color:#e9c58a;background:#fff8e8;color:#9c6d1e;font-weight:800}
     .progress-label{display:inline-block;margin-bottom:7px;border:1px solid transparent;border-radius:7px;padding:5px 8px;font-size:12px;font-weight:750;white-space:nowrap}.progress-label.done{color:#167344;background:#e3f5e9;border-color:#b8dfc3}.progress-label.todo{color:#a44336;background:#fff0ed;border-color:#efc3ba}.progress-label.ongoing{color:#986b13;background:#fff5d9;border-color:#ead393}.ai-summary{max-width:190px;margin-top:6px;color:#65786d;font-size:11px;white-space:normal;line-height:1.45}
+    .progress-actions{display:flex;gap:5px;flex-wrap:wrap}.progress-actions button{padding:5px 7px;font-size:10px}.progress-actions .secondary{font-weight:650}
     #hover-tip{display:none;position:fixed;z-index:20;max-width:min(620px,calc(100vw - 24px));max-height:min(65vh,560px);overflow:auto;padding:12px 15px;border:1px solid #cbd9ce;border-radius:10px;background:#fff;color:#183333;box-shadow:0 12px 34px #18333335;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none}
     td.result{white-space:nowrap}td.face .badge{font-size:14px}
     td.remark{min-width:205px;max-width:260px}.remark-trigger{display:block;width:100%;min-height:34px;text-align:left;border:1px dashed #b7d1c0;border-radius:9px;background:#ffffffa8;color:#487469;padding:7px 9px;font-size:11px;font-weight:650;box-shadow:none;transform:none}.remark-trigger:hover:not(:disabled){background:#fff;border-color:#80bca7;transform:none;box-shadow:0 0 0 3px #dff2e9}.remark-trigger.completed{cursor:default;border-style:solid;border-color:#cfe9d6;background:#ffffffa8;color:#348157;text-align:center}.remark-trigger.completed:hover{transform:none;box-shadow:none}
@@ -50,7 +51,6 @@
   </section>
   <section class="panel table-panel"><div class="toolbar">
     <input id="search" type="text" placeholder="搜索编号、说明、变更内容、专业">
-    <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button><button id="sync-materials" class="secondary">同步已有资料</button>
     <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">Bluebeam 合并 PDF 并输出 A4</option><option value="all">完成全部操作</option></select>
     <button id="batch-run">处理已选</button><button id="batch-zip" class="secondary">将已选成果打总包</button>
   </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>变更完成情况</th><th>进展备注</th><th>成果</th><th>操作</th></tr><tr class="filter-row"><th></th><th><input data-filter="code" aria-label="筛选编号" placeholder="筛选"></th><th><input data-filter="description" aria-label="筛选说明" placeholder="筛选"></th><th><input data-filter="date" aria-label="筛选日期" placeholder="筛选"></th><th><select id="specialty" data-filter="specialty" aria-label="按专业筛选"><option value="all">全部</option></select></th><th><input data-filter="content" aria-label="筛选变更内容" placeholder="筛选"></th><th><select id="status" data-filter="face" aria-label="按面单状态筛选"><option value="all">全部</option><option value="yes">是</option><option value="no">否</option><option value="empty">未填</option></select></th><th><select data-filter="completion" aria-label="按完成情况筛选"><option value="all">全部</option><option value="已完成">已完成</option><option value="未完成">未完成</option><option value="进行中">进行中</option></select></th><th><input data-filter="remark" aria-label="筛选进展备注" placeholder="筛选"></th><th><input data-filter="result" aria-label="筛选成果" placeholder="筛选"></th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
@@ -64,6 +64,7 @@
   <div class="warning" id="detail-warning"></div>
   </div><div class="modal-foot"><button data-action="generate">生成审批表</button><button data-action="copy">复制资料目录及文件</button><button data-action="zip">压缩资料目录</button><button data-action="merge">Bluebeam 合并 + A4</button><button data-action="all">全部处理</button><button id="open-folder" class="secondary">打开成果目录</button></div></dialog>
 <dialog id="remark-dialog"><div class="modal-head"><div><h2>追加进展备注</h2><div class="muted" id="remark-sub"></div></div><button id="remark-close" class="secondary" type="button">关闭</button></div><div class="modal-body"><div id="remark-history" class="remark-history"></div><label for="remark-input" class="field"><h3>新增一条备注</h3><textarea id="remark-input" class="remark-input" maxlength="2000" placeholder="输入该变更当前进展……"></textarea><p class="remark-help">备注按追加方式保存，历史内容不会被覆盖。</p></label></div><div class="modal-foot"><button id="remark-save" class="remark-submit" type="button">追加备注</button></div></dialog>
+<dialog id="progress-dialog"><div class="modal-head"><div><h2>人工设定完成情况</h2><div class="muted" id="progress-sub">AI 判定为进行中，可在此调整状态</div></div><button id="progress-close" class="secondary" type="button">关闭</button></div><div class="modal-body"><label for="progress-choice" class="field"><h3>完成情况</h3><select id="progress-choice"><option value="已完成">已完成</option><option value="未完成">未完成</option><option value="进行中">进行中</option></select></label></div><div class="modal-foot"><button id="progress-save" type="button">保存状态</button></div></dialog>
 <div id="notice" role="status"></div>
 <div id="hover-tip" role="tooltip"></div>
 <script>
@@ -172,13 +173,19 @@
       const idCell=td('','id'),folderLink=document.createElement('a');folderLink.href='#';folderLink.textContent=r['变更通知单编号'];folderLink.title='打开对应的成果文件夹';
       folderLink.onclick=async e=>{e.preventDefault();try{await api('/api/open',{id:r._id});await load()}catch(error){notify(error.message)}};
       idCell.append(folderLink);const desc=td(description(r),'description');desc.dataset.tooltip=r['变更编号和说明']||'';const spec=td(specialty(r),'specialty');spec.dataset.tooltip=specialty(r);row.append(idCell,desc,td(r['日期五'],'date'),spec);
-      const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=(r['变更内容三']||'').replace(/[；。]/g,mark=>`${mark}\n`);clipped.dataset.tooltip=r['变更内容三']||'';content.append(clipped);row.append(content);
+      const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=(r['变更内容三']||'').replace(/[；。]/g,mark=>`${mark}\n`);clipped.dataset.fullText=r['变更内容三']||'';content.append(clipped);row.append(content);
       const status=td('','face');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
       const completionCell=td('','completion');
       const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
       const overallStatus=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
       const progressLabel=document.createElement('span');progressLabel.className='progress-label '+(overallStatus==='已完成'?'done':overallStatus==='进行中'?'ongoing':'todo');progressLabel.textContent=overallStatus;completionCell.append(progressLabel);
-      const aiSummary=r['进展AI判定']?.['摘要'];if(aiSummary){const summary=document.createElement('div');summary.className='ai-summary';summary.textContent=`AI：${aiSummary}`;summary.dataset.tooltip=`${aiSummary}${r['进展AI判定']?.['更新时间']?`\n更新时间：${r['进展AI判定']['更新时间']}`:''}`;completionCell.append(summary)}
+      const aiSummary=r['进展AI判定']?.['摘要'];if(aiSummary){const summary=document.createElement('div');summary.className='ai-summary';summary.textContent=`AI：${aiSummary}${r['进展状态来源']==='人工'?'（人工设定）':''}`;summary.dataset.tooltip=`${aiSummary}${r['进展AI判定']?.['更新时间']?`\nAI更新时间：${r['进展AI判定']['更新时间']}`:''}`;completionCell.append(summary)}
+      const progressActions=document.createElement('div');progressActions.className='progress-actions';
+      const classifyButton=document.createElement('button');classifyButton.type='button';classifyButton.className='secondary';classifyButton.textContent='AI判定';classifyButton.disabled=!(Array.isArray(r['人工备注'])&&r['人工备注'].length);classifyButton.title=classifyButton.disabled?'先追加进展备注，再进行 AI 判定':'根据已有进展备注重新判定';
+      classifyButton.onclick=async()=>{classifyButton.disabled=true;classifyButton.textContent='判定中…';try{const result=await api('/api/progress-ai',{id:r._id});r['进展AI判定']=result['进展AI判定'];r['进展状态']=result['进展状态'];r['进展状态来源']='AI';render();notify(`AI 已判定：${result['进展状态']}`)}catch(e){classifyButton.disabled=false;classifyButton.textContent='AI判定';notify(e.message)}};
+      progressActions.append(classifyButton);
+      if(r['进展AI判定']?.['状态']==='进行中'){const manualButton=document.createElement('button');manualButton.type='button';manualButton.className='secondary';manualButton.textContent='人工设定';manualButton.onclick=()=>{state.progressEditing=r;$('progress-choice').value=r['进展状态']||'进行中';$('progress-dialog').showModal()};progressActions.append(manualButton)}
+      completionCell.append(progressActions);
       const statusList=document.createElement('div');statusList.className='status-list';
       progress.checks.forEach(item=>{const chip=document.createElement('span');chip.className='status-chip'+(item.checked?'':' cross');chip.textContent=`${item.name} ${item.value}`;if(item.sources.length)chip.dataset.tooltip=`${item.name} ${item.value}\n来源：${item.sources.join('、')}`;statusList.append(chip)});
       if(progress.unchecked.length){const missing=document.createElement('div');missing.className='muted';missing.style.marginTop='6px';missing.style.fontSize='10px';missing.textContent=`未勾选：${progress.unchecked.map(item=>`${item.name}${item.sources.length?`（${item.sources.join('、')}）`:''}`).join('、')}`;missing.dataset.tooltip=missing.textContent;statusList.append(missing)}
@@ -189,6 +196,7 @@
       row.append(remarkCell);
       row.append(td(r._output_exists?'已有目录':'尚未生成','muted result'));
       const action=td(''),button=document.createElement('button');button.className='small';button.textContent='查看与操作';button.onclick=()=>showDetail(r);action.append(button);row.append(action);body.append(row);
+      if(clipped.scrollHeight>clipped.clientHeight+1)clipped.dataset.tooltip=clipped.dataset.fullText;
     });
   }
   async function load() {const data=await api('/api/records');state.records=data.records;refreshSpecialties();render();}
@@ -206,27 +214,17 @@
   async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;notify(`${label} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
   $('search').oninput=render;document.querySelectorAll('[data-filter]').forEach(control=>control.addEventListener('input',render));document.querySelectorAll('[data-filter]').forEach(control=>control.addEventListener('change',render));$('close').onclick=()=>$('detail').close();
   $('remark-close').onclick=()=>$('remark-dialog').close();
-  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];if(result['进展AI判定']){record['进展AI判定']=result['进展AI判定'];record['进展状态']=result['进展AI判定']['状态']}$('remark-dialog').close();render();notify(result.ai_error?`备注已保存；AI 分类失败：${result.ai_error}`:`备注已保存，AI 判断为${result['进展AI判定']['状态']}`)}catch(e){notify(e.message)}finally{busy(false)}};
+  $('progress-close').onclick=()=>$('progress-dialog').close();
+  $('progress-save').onclick=async()=>{const record=state.progressEditing;if(!record)return;try{const result=await api('/api/progress-status',{id:record._id,status:$('progress-choice').value});record['进展状态']=result['进展状态'];record['进展状态来源']='人工';$('progress-dialog').close();render();notify(`完成情况已人工设定为：${result['进展状态']}`)}catch(e){notify(e.message)}};
+  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];if(result['进展AI判定']){record['进展AI判定']=result['进展AI判定'];record['进展状态']=result['进展AI判定']['状态'];record['进展状态来源']='AI'}$('remark-dialog').close();render();notify(result.ai_error?`备注已保存；AI 分类失败：${result.ai_error}`:`备注已保存，AI 判断为${result['进展AI判定']['状态']}`)}catch(e){notify(e.message)}finally{busy(false)}};
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
-  let syncWasRunning=false;
-  async function pollSync() {
-    try {
-      const result=await api('/api/sync-status');const button=$('sync-materials');
-      button.disabled=result.running;button.textContent=result.running?`同步资料 ${result.completed}/${result.total}`:'同步已有资料';
-      if(result.running){syncWasRunning=true;setTimeout(pollSync,1500)}
-      else if(syncWasRunning){syncWasRunning=false;await load();notify(`资料同步完成：${result.completed} 条，新增 ${result.copied} 项${result.errors.length?'\n失败：'+result.errors.slice(0,8).join('\n'):''}`)}
-    } catch(e){notify(e.message)}
-  }
-  $('sync-materials').onclick=async()=>{try{await api('/api/sync-materials',{});syncWasRunning=true;pollSync()}catch(e){notify(e.message)}};
-  $('reload').onclick=async()=>{try{busy(true);const result=await api('/api/reload',{});state.selected.clear();await load();notify(`已重读 ${result.count} 条变更`)}catch(e){notify(e.message)}finally{busy(false)}};
-  $('rescan').onclick=async()=>{try{busy(true);await api('/api/rescan',{});notify('资料索引已清除，下次查看条目时重新扫描')}catch(e){notify(e.message)}finally{busy(false)}};
   document.querySelectorAll('[data-action]').forEach(button=>button.onclick=async()=>{if(!state.active)return;try{busy(true);await runAction(state.active._id,button.dataset.action);await load()}catch(e){notify(e.message)}finally{busy(false)}});
   $('open-folder').onclick=async()=>{if(!state.active)return;try{await api('/api/open',{id:state.active._id})}catch(e){notify(e.message)}};
   $('batch-run').onclick=async()=>{const ids=[...state.selected],action=$('batch-action').value;if(!ids.length){notify('请先选择变更');return} if(!confirm(`对 ${ids.length} 条变更执行“${$('batch-action').selectedOptions[0].text}”？`))return;
     let ok=0;const errors=[];try{busy(true);for(const id of ids){try{await api('/api/action',{id,action});ok++}catch(e){const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;errors.push(`${label}: ${e.message}`)}} await load();notify(`完成 ${ok}/${ids.length} 条${errors.length?'\n'+errors.slice(0,8).join('\n'):''}`)}finally{busy(false)}
   };
   $('batch-zip').onclick=async()=>{const ids=[...state.selected];if(!ids.length){notify('请先选择变更');return}try{busy(true);const result=await api('/api/batch-zip',{ids});notify(`总包已生成：${result.file}`)}catch(e){notify(e.message)}finally{busy(false)}};
-  load().then(()=>{pollSync();pollLocalAi();setInterval(pollLocalAi,30000)}).catch(e=>notify(e.message));
+  load().then(()=>{pollLocalAi();setInterval(pollLocalAi,30000)}).catch(e=>notify(e.message));
 </script>
 </body>
 </html>

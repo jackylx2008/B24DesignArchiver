@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import ipaddress
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
 
 
 STATES = {"已完成", "未完成", "进行中"}
@@ -12,11 +14,9 @@ STATES = {"已完成", "未完成", "进行中"}
 
 def local_ai_status(config: dict) -> dict:
     """Check that the configured local service responds and exposes a model."""
-    from urllib.parse import urlsplit
-
     base = str(config.get("local_ai_base_url", "")).rstrip("/")
     parsed = urlsplit(base)
-    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}:
+    if parsed.scheme != "http" or not _is_local_address(parsed.hostname):
         return {"available": False, "model": config.get("local_ai_model", ""), "message": "本地 AI 地址配置无效"}
     root = f"{parsed.scheme}://{parsed.netloc}"
     api = root + (parsed.path or "/v1")
@@ -44,8 +44,9 @@ def classify_progress(notes: list[dict], config: dict) -> dict:
     if not text:
         raise ValueError("没有可供 AI 判断的进展备注")
     base = str(config.get("local_ai_base_url", "")).rstrip("/")
-    if not base.startswith("http://127.0.0.1") and not base.startswith("http://localhost"):
-        raise ValueError("本地 AI 地址必须是本机回环地址")
+    parsed_url = urlsplit(base)
+    if parsed_url.scheme != "http" or not _is_local_address(parsed_url.hostname):
+        raise ValueError("本地 AI 地址必须是回环或私网地址")
     payload = {
         "model": config.get("local_ai_model") or "",
         "temperature": 0.1,
@@ -89,3 +90,13 @@ def classify_progress(notes: list[dict], config: dict) -> dict:
     if status not in STATES:
         raise RuntimeError("本地 AI 返回了未知进展状态")
     return {"状态": status, "摘要": summary}
+
+
+def _is_local_address(host: str | None) -> bool:
+    if host in {"localhost", "::1"}:
+        return True
+    try:
+        address = ipaddress.ip_address(host or "")
+        return address.is_private or address.is_loopback
+    except ValueError:
+        return False

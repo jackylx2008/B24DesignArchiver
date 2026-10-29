@@ -19,7 +19,7 @@ from .operations import (
     zip_materials, zip_selected_folders,
 )
 from .records import append_record_remark, load_records, update_progress_fields, write_record_json, write_records_json
-from .progress_ai import classify_progress, local_ai_status
+from .progress_ai import STATES, classify_progress, local_ai_status
 from .sources import SourceIndex
 
 LOGGER = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ class ArchiveState:
     def records_for_page(self) -> list[dict]:
         aggregate = json.loads(self.records_json.read_text(encoding="utf-8"))
         annotations = {
-            record["_id"]: {key: record[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态") if key in record}
+            record["_id"]: {key: record[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态", "进展状态来源") if key in record}
             for record in aggregate
         }
         return [
@@ -116,6 +116,29 @@ class ArchiveState:
         if values and all(value in CHECK_MARKS for value in values):
             raise ValueError("该变更已完成，不能添加备注")
         return append_record_remark(self.records_json, record_id, note)
+
+    def classify_record_progress(self, record_id: str) -> dict:
+        if record_id not in self.by_id:
+            raise KeyError(f"找不到条目：{record_id}")
+        data = json.loads(self.records_json.read_text(encoding="utf-8"))
+        saved = next((item for item in data if item.get("_id") == record_id), None)
+        notes = saved.get("人工备注", []) if saved else []
+        assessment = classify_progress(notes, self.config)
+        assessment["更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        update_progress_fields(self.records_json, record_id, 进展AI判定=assessment,
+                               进展状态=assessment["状态"], 进展状态来源="AI")
+        return assessment
+
+    def set_progress_status(self, record_id: str, status: str) -> dict:
+        if record_id not in self.by_id:
+            raise KeyError(f"找不到条目：{record_id}")
+        if status not in STATES:
+            raise ValueError("进展状态无效")
+        data = json.loads(self.records_json.read_text(encoding="utf-8"))
+        saved = next((item for item in data if item.get("_id") == record_id), None)
+        if not saved or saved.get("进展AI判定", {}).get("状态") != "进行中":
+            raise ValueError("仅 AI 判定为进行中的记录可以人工调整状态")
+        return update_progress_fields(self.records_json, record_id, 进展状态=status, 进展状态来源="人工")
 
     def folder(self, record: dict) -> Path:
         result = record_directory(record, self.output_root()).resolve()
@@ -287,11 +310,17 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                             assessment = classify_progress(remarks, state.config)
                             assessment["更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
                             update_progress_fields(state.records_json, str(body.get("id", "")),
-                                                   进展AI判定=assessment, 进展状态=assessment["状态"])
+                                                   进展AI判定=assessment, 进展状态=assessment["状态"], 进展状态来源="AI")
                         except Exception as exc:
                             ai_error = str(exc)
                             LOGGER.warning("进展备注 AI 分类失败：%s", exc)
                         self._json({"人工备注": remarks, "进展AI判定": assessment, "ai_error": ai_error})
+                    elif self.path == "/api/progress-ai":
+                        assessment = state.classify_record_progress(str(body.get("id", "")))
+                        self._json({"进展AI判定": assessment, "进展状态": assessment["状态"], "进展状态来源": "AI"})
+                    elif self.path == "/api/progress-status":
+                        updated = state.set_progress_status(str(body.get("id", "")), str(body.get("status", "")))
+                        self._json(updated)
                     elif self.path == "/api/open":
                         record = state.get_record(str(body.get("id", "")))
                         folder = state.folder(record)
