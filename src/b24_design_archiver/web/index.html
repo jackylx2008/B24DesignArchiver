@@ -133,7 +133,7 @@
       const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
       const currentProgress=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
       const values={code:r['变更通知单编号']||'',description:description(r),date:r['日期五']||'',specialty:specialty(r),content:r['变更内容三']||'',completion:currentProgress,remark:notes,result:r._output_exists?'已有目录':'尚未生成'};
-      const textMatches=Object.entries(values).every(([key,value])=>!filters[key]||(key==='completion'?String(value)===filters[key]:String(value).toLocaleLowerCase().includes(filters[key])));
+      const textMatches=Object.entries(values).every(([key,value])=>!filters[key]||(['completion','specialty'].includes(key)?String(value).toLocaleLowerCase()===filters[key]:String(value).toLocaleLowerCase().includes(filters[key])));
       const face=filters.face||'all';
       return (!search||content.includes(search))&&textMatches&&(face==='all'||(face==='yes'&&flag==='是')||(face==='no'&&flag==='否')||(face==='empty'&&!flag));
     });
