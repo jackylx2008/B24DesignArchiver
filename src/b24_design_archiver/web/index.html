@@ -11,8 +11,8 @@
     button:hover:not(:disabled){background:var(--teal-dark);transform:translateY(-1px);box-shadow:0 8px 18px #087b702b}button:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:none}
     button.secondary{border-color:#cbd9ce;background:#fff;color:#31564d}button.secondary:hover:not(:disabled){background:#f3f8f3}button.danger{background:#a86638;border-color:#a86638}
     header{flex:none;background:var(--paper);color:var(--ink);padding:18px max(24px,calc((100vw - 1500px)/2));display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid var(--line)}
-    h1{font-size:22px;letter-spacing:-.035em;margin:0 0 5px}header p{margin:0;color:#75827a;font-size:12px}#top-count{background:#e9efe9;border:1px solid #d8e5d9;border-radius:30px;color:#537264;font-size:12px;font-weight:750;padding:9px 14px;white-space:nowrap}
-    main{width:100%;max-width:1550px;margin:0 auto;padding:20px 24px 22px;flex:1;min-height:0;display:flex;flex-direction:column}
+    h1{font-size:22px;letter-spacing:-.035em;margin:0 0 5px}header p{margin:0;color:#75827a;font-size:12px}.header-status{display:flex;align-items:center;gap:10px}#top-count,#local-ai-status{min-width:108px;text-align:center;background:#e9efe9;border:1px solid #d8e5d9;border-radius:30px;color:#537264;font-size:12px;font-weight:750;padding:9px 14px;white-space:nowrap}#local-ai-status.online{background:#e3f5e9;border-color:#b8dfc3;color:#167344}#local-ai-status.offline{background:#fff0ed;border-color:#efc3ba;color:#a44336}
+    main{width:100%;max-width:1920px;margin:0 auto;padding:20px 28px 22px;flex:1;min-height:0;display:flex;flex-direction:column}
     .panel{background:var(--white);border:1px solid #e7ebe4;border-radius:16px;padding:16px;margin-bottom:15px;box-shadow:var(--shadow)}
     .summary{display:flex;gap:11px;flex-wrap:wrap}.summary span{background:#f5f8f2;border:1px solid #e8eee5;padding:9px 14px;border-radius:11px;font-size:12px;font-weight:650;color:#65786d}
     .summary strong{font-size:19px;color:var(--teal);margin-left:4px;letter-spacing:-.03em}
@@ -20,14 +20,18 @@
     .table-panel{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden;padding:0}
     .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);background:#fff;flex:none}.toolbar input[type=text]{min-width:260px;flex:1}.filter-label{font-size:11px;font-weight:750;color:#65786d;white-space:nowrap;letter-spacing:.02em}
     .table-wrap{overflow:auto;flex:1;min-height:0}
-    table{border-collapse:separate;border-spacing:0;width:100%;min-width:1530px;font-size:12px}thead th{position:sticky;top:0;background:#f6f8f4;z-index:2;color:#839287}
-    th,td{text-align:left;border-bottom:1px solid #e9eee7;padding:11px 10px;vertical-align:top}th{white-space:nowrap;font-weight:800;font-size:10px;letter-spacing:.07em}
+    table{border-collapse:separate;border-spacing:0;width:100%;min-width:1660px;font-size:14px}thead th{position:sticky;top:0;background:#f6f8f4;z-index:2;color:#839287}
+    th,td{text-align:left;border-bottom:1px solid #e9eee7;padding:11px 10px;vertical-align:top}th{white-space:nowrap;font-weight:800;font-size:14px;letter-spacing:0}
+    thead tr.filter-row th{top:43px;padding:5px 7px;background:#f6f8f4;z-index:2}thead tr.filter-row input,thead tr.filter-row select{width:100%;min-width:62px;padding:5px 6px;border-radius:7px;font-size:11px}
     tbody tr{transition:filter .15s}tbody tr:hover{filter:saturate(.92) brightness(.985)}tbody tr.status-complete td{background:#e4f5e9}tbody tr.status-partial td{background:#fff4d9}tbody tr.status-none td{background:#fff0e6}
-    td.id{font-weight:750;white-space:nowrap;color:#1f4941}td.id a{color:var(--teal);text-decoration:underline;text-underline-offset:3px}td.id a:hover{color:#08695f}td.date{white-space:nowrap}td.content{min-width:320px;max-width:430px}
+    tbody td{font-size:14px;line-height:1.55;padding:13px 11px}td.id{font-weight:750;white-space:nowrap;color:#1f4941}td.id a{color:var(--teal);text-decoration:underline;text-underline-offset:3px}td.id a:hover{color:#08695f}td.date{white-space:nowrap}td.description{min-width:170px;max-width:245px}td.specialty{white-space:nowrap;min-width:92px}td.content{min-width:420px;max-width:580px}
     .clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;line-height:1.6}
     .muted{color:#718277}.badge{display:inline-block;border-radius:20px;background:#e4f5e9;color:#348157;padding:5px 9px;white-space:nowrap;font-size:10px;font-weight:800}
     .badge.todo{background:#fff0d7;color:#9c6d1e}.small{font-size:11px;padding:7px 10px;white-space:nowrap}
-    td.completion{min-width:200px;max-width:250px}.status-list{display:flex;gap:5px;flex-wrap:wrap}.status-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #d8e5d9;background:#ffffffb8;color:#537264;border-radius:7px;padding:4px 6px;font-size:10px;white-space:nowrap}.status-chip.cross{border-color:#e9c58a;background:#fff8e8;color:#9c6d1e;font-weight:800}
+    td.completion{min-width:150px;max-width:190px}.status-list{display:flex;flex-direction:column;align-items:flex-start;gap:5px}.status-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #d8e5d9;background:#ffffffb8;color:#537264;border-radius:7px;padding:4px 6px;font-size:11px;white-space:nowrap}.status-chip.cross{border-color:#e9c58a;background:#fff8e8;color:#9c6d1e;font-weight:800}
+    .progress-label{display:inline-block;margin-bottom:7px;border:1px solid transparent;border-radius:7px;padding:5px 8px;font-size:12px;font-weight:750;white-space:nowrap}.progress-label.done{color:#167344;background:#e3f5e9;border-color:#b8dfc3}.progress-label.todo{color:#a44336;background:#fff0ed;border-color:#efc3ba}.progress-label.ongoing{color:#986b13;background:#fff5d9;border-color:#ead393}.ai-summary{max-width:190px;margin-top:6px;color:#65786d;font-size:11px;white-space:normal;line-height:1.45}
+    #hover-tip{display:none;position:fixed;z-index:20;max-width:min(620px,calc(100vw - 24px));max-height:min(65vh,560px);overflow:auto;padding:12px 15px;border:1px solid #cbd9ce;border-radius:10px;background:#fff;color:#183333;box-shadow:0 12px 34px #18333335;font-size:14px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere;pointer-events:none}
+    td.result{white-space:nowrap}td.face .badge{font-size:14px}
     td.remark{min-width:205px;max-width:260px}.remark-trigger{display:block;width:100%;min-height:34px;text-align:left;border:1px dashed #b7d1c0;border-radius:9px;background:#ffffffa8;color:#487469;padding:7px 9px;font-size:11px;font-weight:650;box-shadow:none;transform:none}.remark-trigger:hover:not(:disabled){background:#fff;border-color:#80bca7;transform:none;box-shadow:0 0 0 3px #dff2e9}.remark-trigger.completed{cursor:default;border-style:solid;border-color:#cfe9d6;background:#ffffffa8;color:#348157;text-align:center}.remark-trigger.completed:hover{transform:none;box-shadow:none}
     #notice{display:none;position:fixed;bottom:18px;right:20px;max-width:600px;background:#183333;color:white;padding:14px 18px;border-radius:12px;box-shadow:var(--shadow);z-index:9;white-space:pre-wrap;font-size:12px}
     dialog{border:1px solid #e6e9df;border-radius:18px;padding:0;width:min(720px,94vw);max-height:90vh;box-shadow:0 25px 70px #122d2540;color:var(--ink)}#detail{width:min(950px,94vw)}dialog::backdrop{background:#122d2580;backdrop-filter:blur(3px)}
@@ -39,20 +43,17 @@
   </style>
 </head>
 <body>
-<header><div><h1>B24 设计变更归档</h1><p>一条变更，一个成果目录 · 本地台账与资料</p></div><div id="top-count">正在读取…</div></header>
+<header><div><h1>B24 设计变更归档</h1><p>一条变更，一个成果目录 · 本地台账与资料</p></div><div class="header-status"><div id="local-ai-status" title="正在检查本地 AI 服务">本地AI 检查中…</div><div id="top-count">正在读取…</div></div></header>
 <main>
   <section class="panel">
     <div class="summary"><span>全部变更 <strong id="total">0</strong></span><span>当前显示 <strong id="visible">0</strong></span><span>已有成果目录 <strong id="done">0</strong></span></div>
   </section>
   <section class="panel table-panel"><div class="toolbar">
     <input id="search" type="text" placeholder="搜索编号、说明、变更内容、专业">
-    <label class="filter-label" for="specialty">专业筛选</label>
-    <select id="specialty" aria-label="按专业筛选"><option value="all">全部专业</option></select>
-    <select id="status"><option value="all">全部面单状态</option><option value="yes">已完成面单</option><option value="no">未完成面单</option><option value="empty">未填写状态</option></select>
     <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button><button id="sync-materials" class="secondary">同步已有资料</button>
     <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">Bluebeam 合并 PDF 并输出 A4</option><option value="all">完成全部操作</option></select>
     <button id="batch-run">处理已选</button><button id="batch-zip" class="secondary">将已选成果打总包</button>
-  </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>变更完成情况</th><th>进展备注</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+  </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>变更完成情况</th><th>进展备注</th><th>成果</th><th>操作</th></tr><tr class="filter-row"><th></th><th><input data-filter="code" aria-label="筛选编号" placeholder="筛选"></th><th><input data-filter="description" aria-label="筛选说明" placeholder="筛选"></th><th><input data-filter="date" aria-label="筛选日期" placeholder="筛选"></th><th><select id="specialty" data-filter="specialty" aria-label="按专业筛选"><option value="all">全部</option></select></th><th><input data-filter="content" aria-label="筛选变更内容" placeholder="筛选"></th><th><select id="status" data-filter="face" aria-label="按面单状态筛选"><option value="all">全部</option><option value="yes">是</option><option value="no">否</option><option value="empty">未填</option></select></th><th><select data-filter="completion" aria-label="按完成情况筛选"><option value="all">全部</option><option value="已完成">已完成</option><option value="未完成">未完成</option><option value="进行中">进行中</option></select></th><th><input data-filter="remark" aria-label="筛选进展备注" placeholder="筛选"></th><th><input data-filter="result" aria-label="筛选成果" placeholder="筛选"></th><th></th></tr></thead><tbody id="rows"></tbody></table></div></section>
 </main>
 <dialog id="detail"><div class="modal-head"><div><h2 id="detail-title"></h2><div class="muted" id="detail-sub"></div></div><button id="close" class="secondary">关闭</button></div><div class="modal-body">
   <div class="field"><h3>变更内容</h3><div id="detail-content" style="white-space:pre-wrap;line-height:1.65"></div></div>
@@ -64,10 +65,26 @@
   </div><div class="modal-foot"><button data-action="generate">生成审批表</button><button data-action="copy">复制资料目录及文件</button><button data-action="zip">压缩资料目录</button><button data-action="merge">Bluebeam 合并 + A4</button><button data-action="all">全部处理</button><button id="open-folder" class="secondary">打开成果目录</button></div></dialog>
 <dialog id="remark-dialog"><div class="modal-head"><div><h2>追加进展备注</h2><div class="muted" id="remark-sub"></div></div><button id="remark-close" class="secondary" type="button">关闭</button></div><div class="modal-body"><div id="remark-history" class="remark-history"></div><label for="remark-input" class="field"><h3>新增一条备注</h3><textarea id="remark-input" class="remark-input" maxlength="2000" placeholder="输入该变更当前进展……"></textarea><p class="remark-help">备注按追加方式保存，历史内容不会被覆盖。</p></label></div><div class="modal-foot"><button id="remark-save" class="remark-submit" type="button">追加备注</button></div></dialog>
 <div id="notice" role="status"></div>
+<div id="hover-tip" role="tooltip"></div>
 <script>
   const TOKEN = '__SESSION_TOKEN__';
   const state = {records:[], selected:new Set(), active:null, remarking:null, selectedPdfs:new Set(), pdfOrder:[], busy:false};
   const $ = id => document.getElementById(id);
+  const tipState={hovered:null,pinned:null};
+  function positionTip(target,event) {
+    const tip=$('hover-tip'), rect=target.getBoundingClientRect();
+    const x=event?.clientX??rect.left, y=event?.clientY??rect.bottom;
+    tip.style.left='0px';tip.style.top='0px';
+    const box=tip.getBoundingClientRect();
+    tip.style.left=`${Math.max(8,Math.min(x+14,innerWidth-box.width-8))}px`;
+    tip.style.top=`${Math.max(8,Math.min(y+14,innerHeight-box.height-8))}px`;
+  }
+  function showTip(target,event) {const tip=$('hover-tip');tip.textContent=target.dataset.tooltip||'';tip.style.display='block';positionTip(target,event)}
+  document.addEventListener('mouseover',event=>{const target=event.target.closest?.('[data-tooltip]');if(!target)return;tipState.hovered=target;if(!tipState.pinned)showTip(target,event)});
+  document.addEventListener('mousemove',event=>{if(tipState.hovered&&!tipState.pinned)positionTip(tipState.hovered,event)});
+  document.addEventListener('mouseout',event=>{const target=event.target.closest?.('[data-tooltip]');if(!target||target.contains(event.relatedTarget))return;if(tipState.hovered===target)tipState.hovered=null;if(!tipState.pinned)$('hover-tip').style.display='none'});
+  document.addEventListener('click',event=>{const target=event.target.closest?.('[data-tooltip]');if(target&& !target.matches('button,a,select,input')){tipState.pinned=tipState.pinned===target?null:target;if(tipState.pinned)showTip(target);else $('hover-tip').style.display='none';return}if(tipState.pinned&&!$('hover-tip').contains(event.target)){tipState.pinned=null;$('hover-tip').style.display='none'}});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'){tipState.pinned=null;$('hover-tip').style.display='none'}});
   async function api(path, body) {
     const options = body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':TOKEN},body:JSON.stringify(body)};
     const response = await fetch(path,options); const data = await response.json();
@@ -90,6 +107,13 @@
     if(code.startsWith('泳池变更')) return '泳池设备';
     return '';
   }
+  function description(r) {
+    const raw=String(r['变更编号和说明']||'').trim();
+    const code=String(r['变更通知单编号']||'').trim();
+    const rest=code&&raw.startsWith(code)?raw.slice(code.length).trim():raw;
+    const match=rest.match(/[（(]([\s\S]*?)[）)]/);
+    return match?match[1].trim():rest;
+  }
   function refreshSpecialties() {
     const select=$('specialty'), previous=select.value;
     const counts=new Map();state.records.forEach(r=>{const value=specialty(r);if(value)counts.set(value,(counts.get(value)||0)+1)});
@@ -98,11 +122,17 @@
     select.value=values.includes(previous)?previous:'all';
   }
   function filtered() {
-    const search=$('search').value.trim().toLocaleLowerCase();const status=$('status').value, selectedSpecialty=$('specialty').value;
+    const search=$('search').value.trim().toLocaleLowerCase();const filters={};document.querySelectorAll('[data-filter]').forEach(control=>{const value=control.value.trim().toLocaleLowerCase();filters[control.dataset.filter]=value==='all'?'':value});
     return state.records.filter(r=>{
       const content=[r['变更通知单编号'],r['变更编号和说明'],r['变更内容三'],specialty(r)].join(' ').toLocaleLowerCase();
       const flag=r['是否完成面单'];
-      return (!search||content.includes(search)) && (selectedSpecialty==='all'||specialty(r)===selectedSpecialty) && (status==='all'||(status==='yes'&&flag==='是')||(status==='no'&&flag==='否')||(status==='empty'&&!flag));
+      const progress=completion(r),notes=Array.isArray(r['人工备注'])?r['人工备注'].map(n=>typeof n==='string'?n:n?.['内容']||'').join(' '):'';
+      const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
+      const currentProgress=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
+      const values={code:r['变更通知单编号']||'',description:description(r),date:r['日期五']||'',specialty:specialty(r),content:r['变更内容三']||'',completion:currentProgress,remark:notes,result:r._output_exists?'已有目录':'尚未生成'};
+      const textMatches=Object.entries(values).every(([key,value])=>!filters[key]||(key==='completion'?String(value)===filters[key]:String(value).toLocaleLowerCase().includes(filters[key])));
+      const face=filters.face||'all';
+      return (!search||content.includes(search))&&textMatches&&(face==='all'||(face==='yes'&&flag==='是')||(face==='no'&&flag==='否')||(face==='empty'&&!flag));
     });
   }
   function completion(r) {
@@ -141,22 +171,28 @@
       const checkCell=document.createElement('td'), check=document.createElement('input');check.type='checkbox';check.checked=state.selected.has(r._id);check.addEventListener('change',()=>{check.checked?state.selected.add(r._id):state.selected.delete(r._id)});checkCell.append(check);row.append(checkCell);
       const idCell=td('','id'),folderLink=document.createElement('a');folderLink.href='#';folderLink.textContent=r['变更通知单编号'];folderLink.title='打开对应的成果文件夹';
       folderLink.onclick=async e=>{e.preventDefault();try{await api('/api/open',{id:r._id});await load()}catch(error){notify(error.message)}};
-      idCell.append(folderLink);row.append(idCell,td(r['变更编号和说明']),td(r['日期五'],'date'),td(specialty(r)));
-      const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=r['变更内容三'];content.append(clipped);row.append(content);
-      const status=td('');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
-      const completionCell=td('','completion'),statusList=document.createElement('div');statusList.className='status-list';
-      progress.checks.forEach(item=>{const chip=document.createElement('span');chip.className='status-chip'+(item.checked?'':' cross');chip.textContent=`${item.name} ${item.value}`;if(item.sources.length)chip.title=`来源：${item.sources.join('、')}`;statusList.append(chip)});
-      if(progress.unchecked.length){const missing=document.createElement('div');missing.className='muted';missing.style.marginTop='6px';missing.style.fontSize='10px';missing.textContent=`未勾选：${progress.unchecked.map(item=>`${item.name}${item.sources.length?`（${item.sources.join('、')}）`:''}`).join('、')}`;statusList.append(missing)}
+      idCell.append(folderLink);const desc=td(description(r),'description');desc.dataset.tooltip=r['变更编号和说明']||'';const spec=td(specialty(r),'specialty');spec.dataset.tooltip=specialty(r);row.append(idCell,desc,td(r['日期五'],'date'),spec);
+      const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=(r['变更内容三']||'').replace(/[；。]/g,mark=>`${mark}\n`);clipped.dataset.tooltip=r['变更内容三']||'';content.append(clipped);row.append(content);
+      const status=td('','face');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
+      const completionCell=td('','completion');
+      const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
+      const overallStatus=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
+      const progressLabel=document.createElement('span');progressLabel.className='progress-label '+(overallStatus==='已完成'?'done':overallStatus==='进行中'?'ongoing':'todo');progressLabel.textContent=overallStatus;completionCell.append(progressLabel);
+      const aiSummary=r['进展AI判定']?.['摘要'];if(aiSummary){const summary=document.createElement('div');summary.className='ai-summary';summary.textContent=`AI：${aiSummary}`;summary.dataset.tooltip=`${aiSummary}${r['进展AI判定']?.['更新时间']?`\n更新时间：${r['进展AI判定']['更新时间']}`:''}`;completionCell.append(summary)}
+      const statusList=document.createElement('div');statusList.className='status-list';
+      progress.checks.forEach(item=>{const chip=document.createElement('span');chip.className='status-chip'+(item.checked?'':' cross');chip.textContent=`${item.name} ${item.value}`;if(item.sources.length)chip.dataset.tooltip=`${item.name} ${item.value}\n来源：${item.sources.join('、')}`;statusList.append(chip)});
+      if(progress.unchecked.length){const missing=document.createElement('div');missing.className='muted';missing.style.marginTop='6px';missing.style.fontSize='10px';missing.textContent=`未勾选：${progress.unchecked.map(item=>`${item.name}${item.sources.length?`（${item.sources.join('、')}）`:''}`).join('、')}`;missing.dataset.tooltip=missing.textContent;statusList.append(missing)}
       completionCell.append(statusList);row.append(completionCell);
       const remarkCell=td('','remark');
-      if(progress.allChecked){const completeLabel=document.createElement('span');completeLabel.className='remark-trigger completed';completeLabel.textContent='已完成';remarkCell.append(completeLabel)}
-      else {const addRemark=document.createElement('button');addRemark.type='button';addRemark.className='remark-trigger';const notes=Array.isArray(r['人工备注'])?r['人工备注']:[];const latest=notes.at(-1);const latestText=typeof latest==='string'?latest:latest?.['内容'];addRemark.textContent=latestText?`${latestText.replace(/\s+/g,' ').slice(0,72)} · 点击追加`:'点击添加进展备注';addRemark.title='只追加新备注，不修改已有内容';addRemark.onclick=()=>openRemark(r);remarkCell.append(addRemark)}
+      if(progress.allChecked){const completeLabel=document.createElement('span');completeLabel.className='remark-trigger completed';completeLabel.textContent='已完成';completeLabel.dataset.tooltip='已完成';remarkCell.append(completeLabel)}
+      else {const addRemark=document.createElement('button');addRemark.type='button';addRemark.className='remark-trigger';const notes=Array.isArray(r['人工备注'])?r['人工备注']:[];const latest=notes.at(-1);const latestText=typeof latest==='string'?latest:latest?.['内容'];addRemark.textContent=latestText?`${latestText.replace(/\s+/g,' ').slice(0,72)} · 点击追加`:'点击添加进展备注';addRemark.dataset.tooltip=latestText||'点击添加进展备注';addRemark.onclick=()=>openRemark(r);remarkCell.append(addRemark)}
       row.append(remarkCell);
-      row.append(td(r._output_exists?'已有目录':'尚未生成','muted'));
+      row.append(td(r._output_exists?'已有目录':'尚未生成','muted result'));
       const action=td(''),button=document.createElement('button');button.className='small';button.textContent='查看与操作';button.onclick=()=>showDetail(r);action.append(button);row.append(action);body.append(row);
     });
   }
   async function load() {const data=await api('/api/records');state.records=data.records;refreshSpecialties();render();}
+  async function pollLocalAi() {try{const result=await api('/api/local-ai-status');const badge=$('local-ai-status');badge.className=result.available?'online':'offline';badge.textContent=result.available?'本地AI 正常':'本地AI 未运行';badge.title=result.message||''}catch(e){const badge=$('local-ai-status');badge.className='offline';badge.textContent='本地AI 未运行';badge.title=e.message}}
   async function showDetail(r) {
     state.active=r;state.selectedPdfs.clear();state.pdfOrder=[];$('detail-title').textContent=r['变更通知单编号'];$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
     for(const id of ['detail-dirs','detail-pdfs','detail-docxs']) $(id).textContent='正在检索…';
@@ -168,9 +204,9 @@
     } catch(e){notify(e.message);$('detail-warning').textContent=e.message}
   }
   async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;notify(`${label} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
-  $('search').oninput=render;$('specialty').onchange=render;$('status').onchange=render;$('close').onclick=()=>$('detail').close();
+  $('search').oninput=render;document.querySelectorAll('[data-filter]').forEach(control=>control.addEventListener('input',render));document.querySelectorAll('[data-filter]').forEach(control=>control.addEventListener('change',render));$('close').onclick=()=>$('detail').close();
   $('remark-close').onclick=()=>$('remark-dialog').close();
-  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];$('remark-dialog').close();render();notify('进展备注已追加并保存到总表 JSON')}catch(e){notify(e.message)}finally{busy(false)}};
+  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];if(result['进展AI判定']){record['进展AI判定']=result['进展AI判定'];record['进展状态']=result['进展AI判定']['状态']}$('remark-dialog').close();render();notify(result.ai_error?`备注已保存；AI 分类失败：${result.ai_error}`:`备注已保存，AI 判断为${result['进展AI判定']['状态']}`)}catch(e){notify(e.message)}finally{busy(false)}};
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
   let syncWasRunning=false;
   async function pollSync() {
@@ -190,7 +226,7 @@
     let ok=0;const errors=[];try{busy(true);for(const id of ids){try{await api('/api/action',{id,action});ok++}catch(e){const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;errors.push(`${label}: ${e.message}`)}} await load();notify(`完成 ${ok}/${ids.length} 条${errors.length?'\n'+errors.slice(0,8).join('\n'):''}`)}finally{busy(false)}
   };
   $('batch-zip').onclick=async()=>{const ids=[...state.selected];if(!ids.length){notify('请先选择变更');return}try{busy(true);const result=await api('/api/batch-zip',{ids});notify(`总包已生成：${result.file}`)}catch(e){notify(e.message)}finally{busy(false)}};
-  load().then(pollSync).catch(e=>notify(e.message));
+  load().then(()=>{pollSync();pollLocalAi();setInterval(pollLocalAi,30000)}).catch(e=>notify(e.message));
 </script>
 </body>
 </html>

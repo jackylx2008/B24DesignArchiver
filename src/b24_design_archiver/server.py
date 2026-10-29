@@ -18,7 +18,8 @@ from .operations import (
     copy_materials, generate_approval, merge_pdfs, record_directory,
     zip_materials, zip_selected_folders,
 )
-from .records import append_record_remark, load_records, write_record_json, write_records_json
+from .records import append_record_remark, load_records, update_progress_fields, write_record_json, write_records_json
+from .progress_ai import classify_progress, local_ai_status
 from .sources import SourceIndex
 
 LOGGER = logging.getLogger(__name__)
@@ -80,7 +81,7 @@ class ArchiveState:
     def records_for_page(self) -> list[dict]:
         aggregate = json.loads(self.records_json.read_text(encoding="utf-8"))
         annotations = {
-            record["_id"]: {key: record[key] for key in ("处理情况", "人工备注") if key in record}
+            record["_id"]: {key: record[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态") if key in record}
             for record in aggregate
         }
         return [
@@ -237,6 +238,8 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     with state.lock:
                         records = state.records_for_page()
                         self._json({"records": records, "workbook": str(state.config["workbook"]), "output_root": str(state.output_root()), "records_json": str(state.records_json)})
+                elif parsed.path == "/api/local-ai-status":
+                    self._json(local_ai_status(state.config))
                 elif parsed.path == "/api/sync-status":
                     with state.lock:
                         self._json(dict(state.sync_status))
@@ -278,7 +281,17 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                         self._json(state.action(str(body.get("id", "")), str(body.get("action", "")), selected))
                     elif self.path == "/api/remark":
                         remarks = state.add_remark(str(body.get("id", "")), str(body.get("text", "")))
-                        self._json({"人工备注": remarks})
+                        assessment = None
+                        ai_error = ""
+                        try:
+                            assessment = classify_progress(remarks, state.config)
+                            assessment["更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
+                            update_progress_fields(state.records_json, str(body.get("id", "")),
+                                                   进展AI判定=assessment, 进展状态=assessment["状态"])
+                        except Exception as exc:
+                            ai_error = str(exc)
+                            LOGGER.warning("进展备注 AI 分类失败：%s", exc)
+                        self._json({"人工备注": remarks, "进展AI判定": assessment, "ai_error": ai_error})
                     elif self.path == "/api/open":
                         record = state.get_record(str(body.get("id", "")))
                         folder = state.folder(record)

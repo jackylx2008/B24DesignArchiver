@@ -126,7 +126,7 @@ def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path
     if destination.is_file():
         for item in json.loads(destination.read_text(encoding="utf-8")):
             previous[item["_id"]] = {
-                key: item[key] for key in ("处理情况", "人工备注") if key in item
+                key: item[key] for key in ("处理情况", "人工备注", "进展AI判定", "进展状态") if key in item
             }
     exported = [write_record_json(record, output_root) for record in records]
     for item in exported:
@@ -142,6 +142,9 @@ def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path
             if status is not None:
                 item["处理情况"] = status
             item["人工备注"] = old.get("人工备注", [])
+            for key in ("进展AI判定", "进展状态"):
+                if key in old:
+                    item[key] = old[key]
         else:
             item["处理情况"] = {
                 "蓝图下发情况": {name: "×" for name in ("总包单位", "监理单位", "建设单位")},
@@ -165,3 +168,14 @@ def append_record_remark(destination: Path, record_id: str, text: str) -> list[d
     remarks.append({"内容": text, "保存时间": datetime.now().astimezone().isoformat(timespec="seconds")})
     _write_json(records, destination)
     return remarks
+
+
+def update_progress_fields(destination: Path, record_id: str, **fields: object) -> dict:
+    """Persist AI assessment or user-selected progress status in the aggregate JSON."""
+    records = json.loads(destination.read_text(encoding="utf-8"))
+    record = next((item for item in records if item.get("_id") == record_id), None)
+    if record is None:
+        raise KeyError(f"汇总 JSON 中找不到记录：{record_id}")
+    record.update(fields)
+    _write_json(records, destination)
+    return {key: record[key] for key in fields}

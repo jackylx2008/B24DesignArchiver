@@ -46,6 +46,16 @@ def load_config() -> dict:
         raise FileNotFoundError("缺少 config.yaml；请复制 config.example.yaml 并填写本机资料路径")
     with CONFIG_PATH.open(encoding="utf-8") as stream:
         app = yaml.safe_load(stream)["app"]
+    env_file = PROJECT_ROOT / "common.env"
+    if env_file.is_file():
+        for line in env_file.read_text(encoding="utf-8-sig").splitlines():
+            name, separator, value = line.partition("=")
+            if separator and name.strip() and not name.lstrip().startswith("#"):
+                os.environ.setdefault(name.strip(), value.strip().strip('"').strip("'"))
+    app["local_ai_base_url"] = os.environ.get("LLAMACPP_BASE_URL", "http://127.0.0.1:8080/v1").strip()
+    app["local_ai_model"] = os.environ.get("LLAMACPP_MODEL", "").strip()
+    app["local_ai_api_key"] = os.environ.get("LLAMACPP_API_KEY", "").strip()
+    app["local_ai_timeout"] = int(os.environ.get("LLAMACPP_TIMEOUT_SEC", "180"))
     for key in ("workbook", "template_before", "template_after", "output_root"):
         app[key] = _expand(app[key])
     sources = [_expand(value) for value in app["source_directories"]]
