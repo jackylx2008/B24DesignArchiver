@@ -18,12 +18,14 @@ from .operations import (
     copy_materials, generate_approval, merge_pdfs, record_directory,
     zip_materials, zip_selected_folders,
 )
-from .records import load_records, write_records_json
+from .records import append_record_remark, load_records, write_record_json, write_records_json
 from .sources import SourceIndex
 
 LOGGER = logging.getLogger(__name__)
 WEB_FILE = PROJECT_ROOT / "src" / "b24_design_archiver" / "web" / "index.html"
 SETTINGS_FILE = PROJECT_ROOT / "local_settings.json"
+CHECK_MARKS = {"√", "✓", "✔", "☑"}
+DEFAULT_PARTIES = {"总包单位", "监理单位", "建设单位"}
 
 
 class ArchiveState:
@@ -74,6 +76,45 @@ class ArchiveState:
         if record_id not in self.by_id:
             raise KeyError(f"找不到条目：{record_id}")
         return self.by_id[record_id]
+
+    def records_for_page(self) -> list[dict]:
+        aggregate = json.loads(self.records_json.read_text(encoding="utf-8"))
+        annotations = {
+            record["_id"]: {key: record[key] for key in ("处理情况", "人工备注") if key in record}
+            for record in aggregate
+        }
+        return [
+            {**record, **annotations.get(record["_id"], {}), "_output_exists": self.folder(record).is_dir()}
+            for record in self.records
+        ]
+
+    def add_remark(self, record_id: str, text: str) -> list[dict[str, str]]:
+        if record_id not in self.by_id:
+            raise KeyError(f"找不到条目：{record_id}")
+        note = text.strip()
+        if not note:
+            raise ValueError("备注内容不能为空")
+        if len(note) > 2000:
+            raise ValueError("备注不能超过 2000 个字符")
+        aggregate = json.loads(self.records_json.read_text(encoding="utf-8"))
+        saved = next((item for item in aggregate if item.get("_id") == record_id), None)
+        if saved is None:
+            raise KeyError(f"汇总 JSON 中找不到记录：{record_id}")
+        processing = saved.get("处理情况", {})
+        sources = processing.get("Excel来源记录", [])
+        names = set(DEFAULT_PARTIES)
+        for source in sources:
+            names.update((source.get("蓝图下发情况") or {}).keys())
+        values = []
+        if sources:
+            for source in sources:
+                party_status = source.get("蓝图下发情况") or {}
+                values.extend(str(party_status.get(name, "×")).strip() for name in names)
+        else:
+            values.extend(str(value).strip() for value in processing.get("蓝图下发情况", {}).values())
+        if values and all(value in CHECK_MARKS for value in values):
+            raise ValueError("该变更已完成，不能添加备注")
+        return append_record_remark(self.records_json, record_id, note)
 
     def folder(self, record: dict) -> Path:
         result = record_directory(record, self.output_root()).resolve()
@@ -134,7 +175,7 @@ class ArchiveState:
                     copied = copy_materials(preview, folder)
                     with self.lock:
                         self.sync_status["copied"] += len(copied)
-                        self.records_json = write_records_json(records, output_root)
+                        write_record_json(record, output_root)
                 except Exception as exc:
                     LOGGER.exception("同步资料失败：%s", code)
                     with self.lock:
@@ -194,7 +235,7 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
             try:
                 if parsed.path == "/api/records":
                     with state.lock:
-                        records = [{**record, "_output_exists": state.folder(record).is_dir()} for record in state.records]
+                        records = state.records_for_page()
                         self._json({"records": records, "workbook": str(state.config["workbook"]), "output_root": str(state.output_root()), "records_json": str(state.records_json)})
                 elif parsed.path == "/api/sync-status":
                     with state.lock:
@@ -235,6 +276,9 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                         if selected is not None and (not isinstance(selected, list) or not all(isinstance(item, str) for item in selected)):
                             raise ValueError("PDF 选择格式无效")
                         self._json(state.action(str(body.get("id", "")), str(body.get("action", "")), selected))
+                    elif self.path == "/api/remark":
+                        remarks = state.add_remark(str(body.get("id", "")), str(body.get("text", "")))
+                        self._json({"人工备注": remarks})
                     elif self.path == "/api/open":
                         record = state.get_record(str(body.get("id", "")))
                         folder = state.folder(record)

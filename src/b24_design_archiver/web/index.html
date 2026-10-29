@@ -5,36 +5,37 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>B24 设计变更归档</title>
   <style>
-    :root {font-family:"Microsoft YaHei UI","Segoe UI",sans-serif;color:#182733;background:#f4f7f9}
-    * {box-sizing:border-box} body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden} button,input,select{font:inherit}
-    button{border:0;border-radius:8px;background:#146b70;color:#fff;padding:9px 14px;cursor:pointer}
-    button:hover{background:#0f585d} button:disabled{opacity:.48;cursor:wait} button.secondary{background:#e7eef0;color:#184249}
-    button.secondary:hover{background:#d7e4e7} button.danger{background:#9d4c28}
-    header{background:#12363c;color:white;padding:22px max(24px,calc((100vw - 1500px)/2));display:flex;justify-content:space-between;align-items:center;gap:20px}
-    h1{font-size:23px;margin:0 0 5px} header p{margin:0;color:#c7d9da;font-size:13px}
-    main{width:100%;max-width:1550px;margin:auto;padding:22px 24px;flex:1;min-height:0;display:flex;flex-direction:column}
-    .panel{background:white;border:1px solid #dfe8e9;border-radius:12px;padding:16px;margin-bottom:16px;box-shadow:0 2px 12px #1d48400a}
-    .summary{display:flex;gap:14px;flex-wrap:wrap}.summary span{background:#eaf2f2;padding:8px 12px;border-radius:8px;font-size:13px}
-    .summary strong{font-size:18px;color:#0d6469}
-    input[type=text],select{border:1px solid #cddadb;border-radius:8px;padding:9px 10px;background:white;color:#182733}
+    :root{--paper:#f7f5ef;--white:#fff;--ink:#183333;--ink-soft:#526662;--teal:#087b70;--teal-dark:#08695f;--mint:#dff3e8;--line:#e2e7dd;--gold:#e6a943;--shadow:0 18px 45px rgba(29,60,53,.065);font-family:"Segoe UI","Microsoft YaHei",Arial,sans-serif;color:var(--ink);background:var(--paper)}
+    *{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden;background:var(--paper)}button,input,select,textarea{font:inherit}button{cursor:pointer}
+    button{border:1px solid var(--teal);border-radius:10px;background:var(--teal);color:#fff;padding:9px 14px;font-size:12px;font-weight:750;transition:transform .15s,box-shadow .15s,background .15s}
+    button:hover:not(:disabled){background:var(--teal-dark);transform:translateY(-1px);box-shadow:0 8px 18px #087b702b}button:disabled{opacity:.55;cursor:wait;transform:none;box-shadow:none}
+    button.secondary{border-color:#cbd9ce;background:#fff;color:#31564d}button.secondary:hover:not(:disabled){background:#f3f8f3}button.danger{background:#a86638;border-color:#a86638}
+    header{flex:none;background:var(--paper);color:var(--ink);padding:18px max(24px,calc((100vw - 1500px)/2));display:flex;justify-content:space-between;align-items:center;gap:20px;border-bottom:1px solid var(--line)}
+    h1{font-size:22px;letter-spacing:-.035em;margin:0 0 5px}header p{margin:0;color:#75827a;font-size:12px}#top-count{background:#e9efe9;border:1px solid #d8e5d9;border-radius:30px;color:#537264;font-size:12px;font-weight:750;padding:9px 14px;white-space:nowrap}
+    main{width:100%;max-width:1550px;margin:0 auto;padding:20px 24px 22px;flex:1;min-height:0;display:flex;flex-direction:column}
+    .panel{background:var(--white);border:1px solid #e7ebe4;border-radius:16px;padding:16px;margin-bottom:15px;box-shadow:var(--shadow)}
+    .summary{display:flex;gap:11px;flex-wrap:wrap}.summary span{background:#f5f8f2;border:1px solid #e8eee5;padding:9px 14px;border-radius:11px;font-size:12px;font-weight:650;color:#65786d}
+    .summary strong{font-size:19px;color:var(--teal);margin-left:4px;letter-spacing:-.03em}
+    input[type=text],select,textarea{border:1px solid #e2e9df;border-radius:10px;padding:9px 11px;background:#f9faf6;color:var(--ink);outline:0}input[type=text]:focus,select:focus,textarea:focus{border-color:#80bca7;box-shadow:0 0 0 3px #dff2e9}
     .table-panel{display:flex;flex:1;min-height:0;flex-direction:column;overflow:hidden;padding:0}
-    .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:16px;border-bottom:1px solid #e5ebec;flex:none}.toolbar input[type=text]{min-width:260px;flex:1}.filter-label{font-size:13px;font-weight:600;color:#526469;white-space:nowrap}
+    .toolbar{display:flex;gap:9px;flex-wrap:wrap;align-items:center;padding:15px 16px;border-bottom:1px solid var(--line);background:#fff;flex:none}.toolbar input[type=text]{min-width:260px;flex:1}.filter-label{font-size:11px;font-weight:750;color:#65786d;white-space:nowrap;letter-spacing:.02em}
     .table-wrap{overflow:auto;flex:1;min-height:0}
-    table{border-collapse:separate;border-spacing:0;width:100%;min-width:1180px;font-size:13px} thead th{position:sticky;top:0;background:#edf3f4;z-index:2}
-    th,td{text-align:left;border-bottom:1px solid #e5ebec;padding:10px 9px;vertical-align:top} th{color:#53686e;white-space:nowrap;font-weight:600}
-    tbody tr:hover{background:#f6faf9} td.id{font-weight:700;white-space:nowrap} td.id a{color:#145e63;text-decoration:underline;text-underline-offset:2px} td.id a:hover{color:#0b4549} td.date{white-space:nowrap} td.content{min-width:320px;max-width:450px}
-    .clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap}
-    .muted{color:#71848a}.badge{display:inline-block;border-radius:5px;background:#e1f1ea;color:#227049;padding:3px 7px;white-space:nowrap}
-    .badge.todo{background:#fff1d7;color:#8b5d08}.small{font-size:12px;padding:6px 9px;white-space:nowrap}
-    #notice{display:none;position:fixed;bottom:18px;right:20px;max-width:600px;background:#173d41;color:white;padding:14px 18px;border-radius:10px;box-shadow:0 10px 30px #0003;z-index:9;white-space:pre-wrap}
-    dialog{border:0;border-radius:14px;padding:0;width:min(950px,94vw);max-height:90vh;box-shadow:0 24px 80px #0004}
-    dialog::backdrop{background:#0b292db0}.modal-head{display:flex;justify-content:space-between;align-items:start;padding:18px 22px;background:#eaf2f2}
-    .modal-head h2{margin:0;font-size:19px}.modal-body{padding:18px 22px;overflow:auto;max-height:calc(90vh - 150px)}
-    .modal-foot{padding:14px 22px;border-top:1px solid #e5ebec;display:flex;gap:8px;flex-wrap:wrap}
-    .file-list{max-height:170px;overflow:auto;background:#f6f9f9;padding:9px;border-radius:7px;font-size:12px;line-height:1.7;word-break:break-all}
-    .file-list div{border-bottom:1px solid #e8eeee}.field{margin-bottom:15px}.field h3{margin:0 0 6px;font-size:14px}
-    .warning{color:#a04d20}.busy{opacity:.7;pointer-events:none}
-    @media(max-width:720px){body{height:auto;min-height:100vh;overflow:auto}header{padding:16px}main{padding:12px;display:block}.table-panel{height:70vh;min-height:520px}.toolbar{padding:12px;position:sticky;top:0;z-index:4;background:white}}
+    table{border-collapse:separate;border-spacing:0;width:100%;min-width:1530px;font-size:12px}thead th{position:sticky;top:0;background:#f6f8f4;z-index:2;color:#839287}
+    th,td{text-align:left;border-bottom:1px solid #e9eee7;padding:11px 10px;vertical-align:top}th{white-space:nowrap;font-weight:800;font-size:10px;letter-spacing:.07em}
+    tbody tr{transition:filter .15s}tbody tr:hover{filter:saturate(.92) brightness(.985)}tbody tr.status-complete td{background:#e4f5e9}tbody tr.status-partial td{background:#fff4d9}tbody tr.status-none td{background:#fff0e6}
+    td.id{font-weight:750;white-space:nowrap;color:#1f4941}td.id a{color:var(--teal);text-decoration:underline;text-underline-offset:3px}td.id a:hover{color:#08695f}td.date{white-space:nowrap}td.content{min-width:320px;max-width:430px}
+    .clip{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;white-space:pre-wrap;line-height:1.6}
+    .muted{color:#718277}.badge{display:inline-block;border-radius:20px;background:#e4f5e9;color:#348157;padding:5px 9px;white-space:nowrap;font-size:10px;font-weight:800}
+    .badge.todo{background:#fff0d7;color:#9c6d1e}.small{font-size:11px;padding:7px 10px;white-space:nowrap}
+    td.completion{min-width:200px;max-width:250px}.status-list{display:flex;gap:5px;flex-wrap:wrap}.status-chip{display:inline-flex;align-items:center;gap:4px;border:1px solid #d8e5d9;background:#ffffffb8;color:#537264;border-radius:7px;padding:4px 6px;font-size:10px;white-space:nowrap}.status-chip.cross{border-color:#e9c58a;background:#fff8e8;color:#9c6d1e;font-weight:800}
+    td.remark{min-width:205px;max-width:260px}.remark-trigger{display:block;width:100%;min-height:34px;text-align:left;border:1px dashed #b7d1c0;border-radius:9px;background:#ffffffa8;color:#487469;padding:7px 9px;font-size:11px;font-weight:650;box-shadow:none;transform:none}.remark-trigger:hover:not(:disabled){background:#fff;border-color:#80bca7;transform:none;box-shadow:0 0 0 3px #dff2e9}.remark-trigger.completed{cursor:default;border-style:solid;border-color:#cfe9d6;background:#ffffffa8;color:#348157;text-align:center}.remark-trigger.completed:hover{transform:none;box-shadow:none}
+    #notice{display:none;position:fixed;bottom:18px;right:20px;max-width:600px;background:#183333;color:white;padding:14px 18px;border-radius:12px;box-shadow:var(--shadow);z-index:9;white-space:pre-wrap;font-size:12px}
+    dialog{border:1px solid #e6e9df;border-radius:18px;padding:0;width:min(720px,94vw);max-height:90vh;box-shadow:0 25px 70px #122d2540;color:var(--ink)}#detail{width:min(950px,94vw)}dialog::backdrop{background:#122d2580;backdrop-filter:blur(3px)}
+    .modal-head{display:flex;justify-content:space-between;align-items:start;padding:18px 22px;background:#f5f8f2;border-bottom:1px solid var(--line)}.modal-head h2{margin:0;font-size:18px;letter-spacing:-.03em}.modal-body{padding:18px 22px;overflow:auto;max-height:calc(90vh - 150px)}
+    .modal-foot{padding:14px 22px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}.file-list{max-height:170px;overflow:auto;background:#f5f8f2;padding:9px;border-radius:9px;font-size:12px;line-height:1.7;word-break:break-all}
+    .file-list div{border-bottom:1px solid #e7ece5;padding:3px 1px}.field{margin-bottom:15px}.field h3{margin:0 0 6px;font-size:13px}.warning{color:#a86638}.busy{opacity:.72;pointer-events:none}
+    .remark-history{max-height:220px;overflow:auto;margin-bottom:16px}.remark-entry{white-space:pre-wrap;line-height:1.7;color:#526662;font-size:12px;padding:10px 12px;margin:0 0 8px;border-radius:10px;background:#f5f8f2;border:1px solid #e8eee5}.remark-empty{color:#9aa79c;font-size:12px;margin:0 0 14px}.remark-input{width:100%;min-height:115px;resize:vertical;line-height:1.7}.remark-help{color:#91a096;font-size:10px;margin:7px 0 0}.remark-submit{margin-top:12px}
+    @media(max-width:720px){body{height:auto;min-height:100vh;overflow:auto}header{padding:15px 16px}main{padding:12px;display:block}.table-panel{height:73vh;min-height:540px}.toolbar{padding:12px;position:sticky;top:0;z-index:4;background:white}.summary span{flex:1}}
   </style>
 </head>
 <body>
@@ -51,7 +52,7 @@
     <button id="reload" class="secondary">重读台账</button><button id="rescan" class="secondary">重扫资料</button><button id="sync-materials" class="secondary">同步已有资料</button>
     <select id="batch-action"><option value="generate">生成审批表</option><option value="copy">复制资料目录及 PDF/DOCX</option><option value="zip">压缩资料目录</option><option value="merge">Bluebeam 合并 PDF 并输出 A4</option><option value="all">完成全部操作</option></select>
     <button id="batch-run">处理已选</button><button id="batch-zip" class="secondary">将已选成果打总包</button>
-  </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+  </div><div class="table-wrap"><table><thead><tr><th><input id="select-all" type="checkbox" aria-label="选择当前显示记录"></th><th>变更通知单编号</th><th>编号和说明</th><th>日期</th><th>专业</th><th>变更内容</th><th>面单</th><th>变更完成情况</th><th>进展备注</th><th>成果</th><th>操作</th></tr></thead><tbody id="rows"></tbody></table></div></section>
 </main>
 <dialog id="detail"><div class="modal-head"><div><h2 id="detail-title"></h2><div class="muted" id="detail-sub"></div></div><button id="close" class="secondary">关闭</button></div><div class="modal-body">
   <div class="field"><h3>变更内容</h3><div id="detail-content" style="white-space:pre-wrap;line-height:1.65"></div></div>
@@ -61,10 +62,11 @@
   <div class="field"><h3>匹配的 DOCX 文件</h3><div class="file-list" id="detail-docxs"></div></div>
   <div class="warning" id="detail-warning"></div>
   </div><div class="modal-foot"><button data-action="generate">生成审批表</button><button data-action="copy">复制资料目录及文件</button><button data-action="zip">压缩资料目录</button><button data-action="merge">Bluebeam 合并 + A4</button><button data-action="all">全部处理</button><button id="open-folder" class="secondary">打开成果目录</button></div></dialog>
+<dialog id="remark-dialog"><div class="modal-head"><div><h2>追加进展备注</h2><div class="muted" id="remark-sub"></div></div><button id="remark-close" class="secondary" type="button">关闭</button></div><div class="modal-body"><div id="remark-history" class="remark-history"></div><label for="remark-input" class="field"><h3>新增一条备注</h3><textarea id="remark-input" class="remark-input" maxlength="2000" placeholder="输入该变更当前进展……"></textarea><p class="remark-help">备注按追加方式保存，历史内容不会被覆盖。</p></label></div><div class="modal-foot"><button id="remark-save" class="remark-submit" type="button">追加备注</button></div></dialog>
 <div id="notice" role="status"></div>
 <script>
   const TOKEN = '__SESSION_TOKEN__';
-  const state = {records:[], selected:new Set(), active:null, selectedPdfs:new Set(), pdfOrder:[], busy:false};
+  const state = {records:[], selected:new Set(), active:null, remarking:null, selectedPdfs:new Set(), pdfOrder:[], busy:false};
   const $ = id => document.getElementById(id);
   async function api(path, body) {
     const options = body === undefined ? {} : {method:'POST',headers:{'Content-Type':'application/json','X-Session-Token':TOKEN},body:JSON.stringify(body)};
@@ -103,18 +105,53 @@
       return (!search||content.includes(search)) && (selectedSpecialty==='all'||specialty(r)===selectedSpecialty) && (status==='all'||(status==='yes'&&flag==='是')||(status==='no'&&flag==='否')||(status==='empty'&&!flag));
     });
   }
+  function completion(r) {
+    const processing=r['处理情况']||{},sourceRows=Array.isArray(processing['Excel来源记录'])?processing['Excel来源记录']:[];
+    const partyNames=new Set(['总包单位','监理单位','建设单位']);
+    sourceRows.forEach(source=>Object.keys(source['蓝图下发情况']||{}).forEach(name=>partyNames.add(name)));
+    const occurrences=[];
+    if(sourceRows.length){sourceRows.forEach(source=>{const statuses=source['蓝图下发情况']||{};partyNames.forEach(name=>occurrences.push({name,value:String(statuses[name]||'×').trim(),source:source['来源工作表']||''}))})}
+    else Object.entries(processing['蓝图下发情况']||Object.fromEntries([...partyNames].map(name=>[name,'×']))).forEach(([name,value])=>occurrences.push({name,value:String(value||'×').trim(),source:''}));
+    const isChecked=value=>['√','✓','✔','☑'].includes(String(value||'').trim());
+    const grouped=new Map();
+    occurrences.forEach(item=>{const key=`${item.name}\u0000${item.value}`;if(!grouped.has(key))grouped.set(key,{...item,checked:isChecked(item.value),sources:new Set()});if(item.source)grouped.get(key).sources.add(item.source)});
+    const checks=[...grouped.values()].map(item=>({...item,sources:[...item.sources]}));
+    const allChecked=occurrences.length>0&&occurrences.every(item=>isChecked(item.value));
+    const allCross=occurrences.length>0&&occurrences.every(item=>['×','✕','✖','X','x'].includes(item.value));
+    const unchecked=checks.filter(item=>!item.checked);
+    return {checks,allChecked,allCross,unchecked};
+  }
+  function openRemark(r) {
+    if(completion(r).allChecked)return;
+    state.remarking=r;
+    $('remark-sub').textContent=`${r['变更通知单编号']} · ${r['变更编号和说明']||''}`;
+    $('remark-history').replaceChildren();
+    const remarks=Array.isArray(r['人工备注'])?r['人工备注']:[];
+    if(!remarks.length){const empty=document.createElement('p');empty.className='remark-empty';empty.textContent='还没有人工备注';$('remark-history').append(empty)}
+    remarks.forEach(note=>{const entry=document.createElement('p');entry.className='remark-entry';entry.textContent=typeof note==='string'?note:(note['内容']||'');$('remark-history').append(entry)});
+    $('remark-input').value='';$('remark-dialog').showModal();$('remark-input').focus();
+  }
   function render() {
     const list=filtered(), body=$('rows');body.replaceChildren();
     $('total').textContent=state.records.length;$('visible').textContent=list.length;$('done').textContent=state.records.filter(r=>r._output_exists).length;
     $('top-count').textContent=`${state.records.length} 条变更`;
     list.forEach(r=>{
-      const row=document.createElement('tr');
+      const row=document.createElement('tr'),progress=completion(r);
+      row.className=progress.allChecked?'status-complete':progress.allCross?'status-none':'status-partial';
       const checkCell=document.createElement('td'), check=document.createElement('input');check.type='checkbox';check.checked=state.selected.has(r._id);check.addEventListener('change',()=>{check.checked?state.selected.add(r._id):state.selected.delete(r._id)});checkCell.append(check);row.append(checkCell);
       const idCell=td('','id'),folderLink=document.createElement('a');folderLink.href='#';folderLink.textContent=r['变更通知单编号'];folderLink.title='打开对应的成果文件夹';
       folderLink.onclick=async e=>{e.preventDefault();try{await api('/api/open',{id:r._id});await load()}catch(error){notify(error.message)}};
       idCell.append(folderLink);row.append(idCell,td(r['变更编号和说明']),td(r['日期五'],'date'),td(specialty(r)));
       const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=r['变更内容三'];content.append(clipped);row.append(content);
       const status=td('');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
+      const completionCell=td('','completion'),statusList=document.createElement('div');statusList.className='status-list';
+      progress.checks.forEach(item=>{const chip=document.createElement('span');chip.className='status-chip'+(item.checked?'':' cross');chip.textContent=`${item.name} ${item.value}`;if(item.sources.length)chip.title=`来源：${item.sources.join('、')}`;statusList.append(chip)});
+      if(progress.unchecked.length){const missing=document.createElement('div');missing.className='muted';missing.style.marginTop='6px';missing.style.fontSize='10px';missing.textContent=`未勾选：${progress.unchecked.map(item=>`${item.name}${item.sources.length?`（${item.sources.join('、')}）`:''}`).join('、')}`;statusList.append(missing)}
+      completionCell.append(statusList);row.append(completionCell);
+      const remarkCell=td('','remark');
+      if(progress.allChecked){const completeLabel=document.createElement('span');completeLabel.className='remark-trigger completed';completeLabel.textContent='已完成';remarkCell.append(completeLabel)}
+      else {const addRemark=document.createElement('button');addRemark.type='button';addRemark.className='remark-trigger';const notes=Array.isArray(r['人工备注'])?r['人工备注']:[];const latest=notes.at(-1);const latestText=typeof latest==='string'?latest:latest?.['内容'];addRemark.textContent=latestText?`${latestText.replace(/\s+/g,' ').slice(0,72)} · 点击追加`:'点击添加进展备注';addRemark.title='只追加新备注，不修改已有内容';addRemark.onclick=()=>openRemark(r);remarkCell.append(addRemark)}
+      row.append(remarkCell);
       row.append(td(r._output_exists?'已有目录':'尚未生成','muted'));
       const action=td(''),button=document.createElement('button');button.className='small';button.textContent='查看与操作';button.onclick=()=>showDetail(r);action.append(button);row.append(action);body.append(row);
     });
@@ -132,6 +169,8 @@
   }
   async function runAction(id,action) {const payload={id,action};if(action==='merge'||action==='all')payload.selected_pdfs=state.pdfOrder.filter(pdf=>state.selectedPdfs.has(pdf));const result=await api('/api/action',payload);const label=state.records.find(r=>r._id===id)?.['变更通知单编号']||id;notify(`${label} 已完成：${result.files.length} 个文件\n${result.folder}`);return result;}
   $('search').oninput=render;$('specialty').onchange=render;$('status').onchange=render;$('close').onclick=()=>$('detail').close();
+  $('remark-close').onclick=()=>$('remark-dialog').close();
+  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];$('remark-dialog').close();render();notify('进展备注已追加并保存到总表 JSON')}catch(e){notify(e.message)}finally{busy(false)}};
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
   let syncWasRunning=false;
   async function pollSync() {

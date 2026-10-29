@@ -85,8 +85,11 @@ class WorkflowTest(unittest.TestCase):
         self.assertIn("调整水泵参数", doc.tables[0].cell(0, 0).text)
         self.assertIn("2025.09.30", doc.paragraphs[0].text)
         copy_result = self.state.action(self.first_id, "copy")
-        self.assertEqual(len(copy_result["files"]), 3)
-        self.assertTrue(Path(copy_result["files"][0]).is_dir())
+        self.assertEqual(len(copy_result["files"]), 2)
+        self.assertTrue(Path(copy_result["files"][0]).is_file())
+        self.assertTrue((generated.parent / "record.json").is_file())
+        self.assertFalse((generated.parent / "原始资料目录").exists())
+        self.assertFalse((generated.parent / "资料文件").exists())
         self.assertEqual(self.state.action(self.first_id, "copy")["files"], [])
         archive_result = self.state.action(self.first_id, "zip")
         with zipfile.ZipFile(archive_result["files"][0]) as archive:
@@ -104,6 +107,7 @@ class WorkflowTest(unittest.TestCase):
         self.assertEqual(exported[0]["专业"], "给排水")
         self.assertEqual(exported[0]["变更内容"], "调整水泵参数")
         self.assertEqual(exported[0]["版本"], "施工图")
+        self.assertEqual(json.loads((self.state.folder(self.state.records[0]) / "record.json").read_text(encoding="utf-8")), exported[0])
         for marker in ("审批表编号", "提出单位一", "变更原因二", "变更内容三", "何种专业四", "日期五", "六版本"):
             self.assertNotIn(marker, exported[0])
         new_root = self.root / "new-output"
@@ -125,6 +129,20 @@ class WorkflowTest(unittest.TestCase):
         }
         for code, expected in cases.items():
             self.assertEqual(specialty_for(code), expected)
+
+    def test_copy_materials_keeps_source_contents_at_record_root(self) -> None:
+        source = self.root / "source" / "05-03-C2-001（水泵）"
+        nested = source / "word&CAD"
+        nested.mkdir()
+        (nested / "水泵图.dwg").write_bytes(b"drawing")
+        folder = self.state.folder(self.state.records[0])
+        self.state.action(self.first_id, "copy")
+        self.assertTrue((folder / "05-03-C2-001图纸.pdf").is_file())
+        self.assertTrue((folder / "word&CAD" / "水泵图.dwg").is_file())
+        self.assertFalse((folder / "原始资料目录").exists())
+        self.assertFalse((folder / "资料文件").exists())
+        data = json.loads((folder / "record.json").read_text(encoding="utf-8"))
+        self.assertIn("word&CAD/水泵图.dwg", data["资料文件"])
 
     def test_sync_materials_updates_json(self) -> None:
         self.state.start_material_sync()
@@ -184,7 +202,7 @@ class WorkflowTest(unittest.TestCase):
                 result = json.load(response)
             self.assertEqual(len(result["files"]), 1)
             unopened = self.state.folder(self.state.get_record(self.second_id))
-            self.assertFalse(unopened.exists())
+            self.assertTrue((unopened / "record.json").is_file())
             opener = "b24_design_archiver.server.os.startfile" if os.name == "nt" else "b24_design_archiver.server.subprocess.Popen"
             with patch(opener) as open_folder:
                 request = urllib.request.Request(base + "/api/open", data=json.dumps({"id": self.second_id}).encode(), headers={"Content-Type": "application/json", "X-Session-Token": self.state.token})
@@ -226,7 +244,7 @@ class WorkflowTest(unittest.TestCase):
         self.state.sources.invalidate()
         with self.assertRaisesRegex(ValueError, "选择要合并的文件"):
             self.state.action(self.first_id, "merge")
-        self.assertFalse(self.state.folder(self.state.get_record(self.first_id)).exists())
+        self.assertEqual([path.name for path in self.state.folder(self.state.get_record(self.first_id)).iterdir()], ["record.json"])
         with self.assertRaisesRegex(ValueError, "请选择当前变更"):
             self.state.action(self.first_id, "merge", ["outside.pdf"])
 

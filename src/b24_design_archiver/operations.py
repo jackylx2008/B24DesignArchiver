@@ -131,28 +131,23 @@ def _copy_file(source: Path, target: Path) -> None:
 
 
 def copy_materials(preview: dict, folder: Path) -> list[str]:
-    target_dir = folder / "资料文件"
     copied = []
-    for name in preview["directories"]:
-        source = Path(name)
-        source_hash = hashlib.sha1(str(source.resolve()).encode("utf-8")).hexdigest()[:8]
-        target = folder / "原始资料目录" / f"{safe_name(source.name)}_{source_hash}"
-        new_files = 0
+    directories = [Path(name) for name in preview["directories"]]
+    for source in directories:
         for path in source.rglob("*"):
             if path.is_dir():
-                (target / path.relative_to(source)).mkdir(parents=True, exist_ok=True)
+                (folder / path.relative_to(source)).mkdir(parents=True, exist_ok=True)
             elif path.is_file():
-                destination = _unique_target(target / path.relative_to(source), path)
+                destination = _unique_target(folder / path.relative_to(source), path)
                 if destination is not None:
                     _copy_file(path, destination)
-                    new_files += 1
-        if new_files:
-            copied.append(str(target))
+                    copied.append(str(destination))
     sources = sorted(set(preview["pdfs"] + preview["docxs"]))
     for name in sources:
         source = Path(name)
-        target_dir.mkdir(parents=True, exist_ok=True)
-        target = _unique_target(target_dir / safe_name(source.name, 180), source)
+        if any(directory == source or directory in source.parents for directory in directories):
+            continue
+        target = _unique_target(folder / safe_name(source.name, 180), source)
         if target is not None:
             _copy_file(source, target)
             copied.append(str(target))

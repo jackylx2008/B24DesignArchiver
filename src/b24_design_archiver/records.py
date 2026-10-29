@@ -84,28 +84,13 @@ def load_records(workbook: Path) -> list[dict[str, str]]:
         book.close()
 
 
-def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path:
-    """保存使用清晰字段名的条目 JSON，不导出台账模板标记列。"""
-    output_root.mkdir(parents=True, exist_ok=True)
-    destination = output_root / "B24变更条目.json"
-    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=output_root, suffix=".json", delete=False) as stream:
+def _write_json(data: object, destination: Path) -> Path:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=destination.parent, suffix=".json", delete=False) as stream:
         temporary = Path(stream.name)
     try:
         with temporary.open("w", encoding="utf-8") as stream:
-            exported = []
-            for record in records:
-                item = {EXPORT_NAMES.get(key, key): value for key, value in record.items()
-                        if key not in {"审批表编号", "何种专业四"}}
-                folder = record_directory(record, output_root)
-                copied = []
-                for name in ("原始资料目录", "资料文件"):
-                    material_root = folder / name
-                    if material_root.is_dir():
-                        copied.extend(path.relative_to(output_root).as_posix() for path in material_root.rglob("*") if filesystem_path(path).is_file())
-                item["已复制资料"] = bool(copied)
-                item["资料文件"] = sorted(copied)
-                exported.append(item)
-            json.dump(exported, stream, ensure_ascii=False, indent=2)
+            json.dump(data, stream, ensure_ascii=False, indent=2)
             stream.write("\n")
         for attempt in range(10):
             try:
@@ -118,3 +103,65 @@ def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path
     finally:
         temporary.unlink(missing_ok=True)
     return destination
+
+
+def write_record_json(record: dict[str, str], output_root: Path) -> dict:
+    """为一条变更保存元数据，资料直接列在其成果目录下。"""
+    folder = record_directory(record, output_root)
+    folder.mkdir(parents=True, exist_ok=True)
+    item = {EXPORT_NAMES.get(key, key): value for key, value in record.items()
+            if key not in {"审批表编号", "何种专业四"}}
+    copied = sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*")
+                    if path != folder / "record.json" and filesystem_path(path).is_file())
+    item["已复制资料"] = bool(copied)
+    item["资料文件"] = copied
+    _write_json(item, folder / "record.json")
+    return item
+
+
+def write_records_json(records: list[dict[str, str]], output_root: Path) -> Path:
+    """更新每条变更的 record.json 和输出根目录的汇总 JSON。"""
+    destination = output_root / "B24变更条目.json"
+    previous = {}
+    if destination.is_file():
+        for item in json.loads(destination.read_text(encoding="utf-8")):
+            previous[item["_id"]] = {
+                key: item[key] for key in ("处理情况", "人工备注") if key in item
+            }
+    exported = [write_record_json(record, output_root) for record in records]
+    for item in exported:
+        if item["_id"] in previous:
+            old = previous[item["_id"]]
+            status = old.get("处理情况")
+            if isinstance(status, list):
+                # Migrate the earlier row-list format in the aggregate JSON.
+                from .processing_status import summarize_processing_status
+                status = summarize_processing_status(
+                    status, is_jz=item["变更通知单编号"].startswith("JZ-")
+                )
+            if status is not None:
+                item["处理情况"] = status
+            item["人工备注"] = old.get("人工备注", [])
+        else:
+            item["处理情况"] = {
+                "蓝图下发情况": {name: "×" for name in ("总包单位", "监理单位", "建设单位")},
+                "Excel来源记录": [],
+            }
+            item["人工备注"] = []
+    return _write_json(exported, destination)
+
+
+def append_record_remark(destination: Path, record_id: str, text: str) -> list[dict[str, str]]:
+    """把人工备注作为追加记录写入根目录汇总 JSON。"""
+    from datetime import datetime
+
+    records = json.loads(destination.read_text(encoding="utf-8"))
+    record = next((item for item in records if item.get("_id") == record_id), None)
+    if record is None:
+        raise KeyError(f"汇总 JSON 中找不到记录：{record_id}")
+    remarks = record.setdefault("人工备注", [])
+    if not isinstance(remarks, list):
+        raise ValueError("该记录的人工备注格式无效")
+    remarks.append({"内容": text, "保存时间": datetime.now().astimezone().isoformat(timespec="seconds")})
+    _write_json(records, destination)
+    return remarks
