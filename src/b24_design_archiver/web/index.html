@@ -170,7 +170,9 @@
     $('top-count').textContent=`${state.records.length} 条变更`;
     list.forEach(r=>{
       const row=document.createElement('tr'),progress=completion(r);
-      row.className=progress.allChecked?'status-complete':progress.allCross?'status-none':'status-partial';
+      const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
+      const overallStatus=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
+      row.className=overallStatus==='已完成'?'status-complete':overallStatus==='未完成'?'status-none':'status-partial';
       const checkCell=document.createElement('td'), check=document.createElement('input');check.type='checkbox';check.checked=state.selected.has(r._id);check.addEventListener('change',()=>{check.checked?state.selected.add(r._id):state.selected.delete(r._id)});checkCell.append(check);row.append(checkCell);
       const idCell=td('','id'),folderLink=document.createElement('a');folderLink.href='#';folderLink.textContent=r['变更通知单编号'];folderLink.title='打开对应的成果文件夹';
       folderLink.onclick=async e=>{e.preventDefault();try{await api('/api/open',{id:r._id});await load()}catch(error){notify(error.message)}};
@@ -178,8 +180,6 @@
       const content=td('', 'content'), clipped=document.createElement('div');clipped.className='clip';clipped.textContent=(r['变更内容三']||'').replace(/[；。]/g,mark=>`${mark}\n`);clipped.dataset.fullText=r['变更内容三']||'';content.append(clipped);row.append(content);
       const status=td('','face');const badge=document.createElement('span');badge.className='badge'+(r['是否完成面单']==='否'?' todo':'');badge.textContent=r['是否完成面单']||'未填';status.append(badge);row.append(status);
       const completionCell=td('','completion');
-      const derivedStatus=progress.allChecked?'已完成':progress.checks.some(item=>item.checked)?'进行中':'未完成';
-      const overallStatus=r['进展状态']||r['进展AI判定']?.['状态']||derivedStatus;
       if(overallStatus==='已完成')completionCell.classList.add('progress-done');
       const progressLabel=document.createElement('span');progressLabel.className='progress-label '+(overallStatus==='已完成'?'done':overallStatus==='进行中'?'ongoing':'todo');progressLabel.textContent=overallStatus;completionCell.append(progressLabel);
       const aiSummary=r['进展AI判定']?.['摘要'];if(aiSummary){const summary=document.createElement('div');summary.className='ai-summary';summary.textContent=`AI：${aiSummary}${r['进展状态来源']==='人工'?'（人工设定）':''}`;summary.dataset.tooltip=`${aiSummary}${r['进展AI判定']?.['更新时间']?`\nAI更新时间：${r['进展AI判定']['更新时间']}`:''}`;completionCell.append(summary)}
