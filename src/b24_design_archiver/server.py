@@ -129,6 +129,37 @@ class ArchiveState:
                                进展状态=assessment["状态"], 进展状态来源="AI")
         return assessment
 
+    def classify_pending_progress(self) -> dict:
+        aggregate = json.loads(self.records_json.read_text(encoding="utf-8"))
+        pending = []
+        for item in aggregate:
+            notes = item.get("人工备注", [])
+            if not notes:
+                continue
+            assessed_at = item.get("进展AI判定", {}).get("更新时间", "")
+            if not assessed_at:
+                pending.append(item)
+                continue
+            try:
+                assessed_time = datetime.fromisoformat(assessed_at)
+                has_new_note = any(
+                    datetime.fromisoformat(note.get("保存时间", "")) > assessed_time
+                    for note in notes if isinstance(note, dict) and note.get("保存时间")
+                )
+            except ValueError:
+                has_new_note = True
+            if has_new_note:
+                pending.append(item)
+        updated, errors = [], []
+        for item in pending:
+            code = item.get("变更通知单编号", item.get("_id", ""))
+            try:
+                self.classify_record_progress(item["_id"])
+                updated.append(code)
+            except Exception as exc:
+                errors.append({"编号": code, "错误": str(exc)})
+        return {"total": len(pending), "updated": updated, "errors": errors}
+
     def set_progress_status(self, record_id: str, status: str) -> dict:
         if record_id not in self.by_id:
             raise KeyError(f"找不到条目：{record_id}")
@@ -304,20 +335,12 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                         self._json(state.action(str(body.get("id", "")), str(body.get("action", "")), selected))
                     elif self.path == "/api/remark":
                         remarks = state.add_remark(str(body.get("id", "")), str(body.get("text", "")))
-                        assessment = None
-                        ai_error = ""
-                        try:
-                            assessment = classify_progress(remarks, state.config)
-                            assessment["更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
-                            update_progress_fields(state.records_json, str(body.get("id", "")),
-                                                   进展AI判定=assessment, 进展状态=assessment["状态"], 进展状态来源="AI")
-                        except Exception as exc:
-                            ai_error = str(exc)
-                            LOGGER.warning("进展备注 AI 分类失败：%s", exc)
-                        self._json({"人工备注": remarks, "进展AI判定": assessment, "ai_error": ai_error})
+                        self._json({"人工备注": remarks})
                     elif self.path == "/api/progress-ai":
                         assessment = state.classify_record_progress(str(body.get("id", "")))
                         self._json({"进展AI判定": assessment, "进展状态": assessment["状态"], "进展状态来源": "AI"})
+                    elif self.path == "/api/progress-ai-batch":
+                        self._json(state.classify_pending_progress())
                     elif self.path == "/api/progress-status":
                         updated = state.set_progress_status(str(body.get("id", "")), str(body.get("status", "")))
                         self._json(updated)

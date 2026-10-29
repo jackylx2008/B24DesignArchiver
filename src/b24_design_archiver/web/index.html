@@ -44,7 +44,7 @@
   </style>
 </head>
 <body>
-<header><div><h1>B24 设计变更归档</h1><p>一条变更，一个成果目录 · 本地台账与资料</p></div><div class="header-status"><div id="local-ai-status" title="正在检查本地 AI 服务">本地AI 检查中…</div><div id="top-count">正在读取…</div></div></header>
+<header><div><h1>B24 设计变更归档</h1><p>一条变更，一个成果目录 · 本地台账与资料</p></div><div class="header-status"><div id="local-ai-status" title="正在检查本地 AI 服务">本地AI 检查中…</div><button id="ai-update-progress" type="button" class="secondary">AI批量更新变更情况</button><div id="top-count">正在读取…</div></div></header>
 <main>
   <section class="panel">
     <div class="summary"><span>全部变更 <strong id="total">0</strong></span><span>当前显示 <strong id="visible">0</strong></span><span>已有成果目录 <strong id="done">0</strong></span></div>
@@ -201,6 +201,7 @@
   }
   async function load() {const data=await api('/api/records');state.records=data.records;refreshSpecialties();render();}
   async function pollLocalAi() {try{const result=await api('/api/local-ai-status');const badge=$('local-ai-status');badge.className=result.available?'online':'offline';badge.textContent=result.available?'本地AI 正常':'本地AI 未运行';badge.title=result.message||''}catch(e){const badge=$('local-ai-status');badge.className='offline';badge.textContent='本地AI 未运行';badge.title=e.message}}
+  $('ai-update-progress').onclick=async()=>{const button=$('ai-update-progress');button.disabled=true;button.textContent='AI分析中…';try{const result=await api('/api/progress-ai-batch',{});await load();const detail=result.errors.length?`\n失败：${result.errors.slice(0,5).map(item=>`${item['编号']}：${item['错误']}`).join('\n')}`:'';notify(`AI进展更新完成：更新 ${result.updated.length}/${result.total} 条${result.total===0?'，没有待处理的新备注':''}${detail}`)}catch(e){notify(e.message)}finally{button.disabled=false;button.textContent='AI批量更新变更情况'}}
   async function showDetail(r) {
     state.active=r;state.selectedPdfs.clear();state.pdfOrder=[];$('detail-title').textContent=r['变更通知单编号'];$('detail-sub').textContent=r['变更编号和说明'];$('detail-content').textContent=r['变更内容三'];
     for(const id of ['detail-dirs','detail-pdfs','detail-docxs']) $(id).textContent='正在检索…';
@@ -216,7 +217,7 @@
   $('remark-close').onclick=()=>$('remark-dialog').close();
   $('progress-close').onclick=()=>$('progress-dialog').close();
   $('progress-save').onclick=async()=>{const record=state.progressEditing;if(!record)return;try{const result=await api('/api/progress-status',{id:record._id,status:$('progress-choice').value});record['进展状态']=result['进展状态'];record['进展状态来源']='人工';$('progress-dialog').close();render();notify(`完成情况已人工设定为：${result['进展状态']}`)}catch(e){notify(e.message)}};
-  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];if(result['进展AI判定']){record['进展AI判定']=result['进展AI判定'];record['进展状态']=result['进展AI判定']['状态'];record['进展状态来源']='AI'}$('remark-dialog').close();render();notify(result.ai_error?`备注已保存；AI 分类失败：${result.ai_error}`:`备注已保存，AI 判断为${result['进展AI判定']['状态']}`)}catch(e){notify(e.message)}finally{busy(false)}};
+  $('remark-save').onclick=async()=>{const record=state.remarking,text=$('remark-input').value.trim();if(!record||!text){notify('请输入备注内容');return}try{busy(true);const result=await api('/api/remark',{id:record._id,text});record['人工备注']=result['人工备注'];$('remark-dialog').close();render();notify('进展备注已保存；可点击顶部“AI批量更新变更情况”统一更新状态')}catch(e){notify(e.message)}finally{busy(false)}};
   $('select-all').onchange=e=>{filtered().forEach(r=>e.target.checked?state.selected.add(r._id):state.selected.delete(r._id));render()};
   document.querySelectorAll('[data-action]').forEach(button=>button.onclick=async()=>{if(!state.active)return;try{busy(true);await runAction(state.active._id,button.dataset.action);await load()}catch(e){notify(e.message)}finally{busy(false)}});
   $('open-folder').onclick=async()=>{if(!state.active)return;try{await api('/api/open',{id:state.active._id})}catch(e){notify(e.message)}};
