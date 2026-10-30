@@ -21,7 +21,10 @@
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import sys
+import subprocess
 import threading
 import webbrowser
 from pathlib import Path
@@ -32,6 +35,65 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from b24_design_archiver.server import ArchiveState, create_server  # noqa: E402
+
+
+def _chrome_path() -> Path | None:
+    """Return a local Chrome executable on Windows, if installed."""
+    if sys.platform != "win32":
+        return None
+    candidates = [shutil.which("chrome.exe"), shutil.which("chrome")]
+    for variable in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        base = os.environ.get(variable)
+        if base:
+            candidates.append(str(Path(base) / "Google/Chrome/Application/chrome.exe"))
+    return next((Path(candidate) for candidate in candidates if candidate and Path(candidate).is_file()), None)
+
+
+def _chrome_windows() -> set[int]:
+    """Find visible Chrome windows currently showing this app's page title."""
+    if sys.platform != "win32":
+        return set()
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    enum_callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.IsWindowVisible.argtypes = [wintypes.HWND]
+    user32.IsWindowVisible.restype = wintypes.BOOL
+    user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
+    user32.GetWindowTextLengthW.restype = ctypes.c_int
+    user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.GetWindowTextW.restype = ctypes.c_int
+    user32.EnumWindows.argtypes = [enum_callback, wintypes.LPARAM]
+    user32.EnumWindows.restype = wintypes.BOOL
+    found: set[int] = set()
+
+    def collect(hwnd: int, _lparam: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        length = user32.GetWindowTextLengthW(hwnd)
+        if not length:
+            return True
+        title = ctypes.create_unicode_buffer(length + 1)
+        user32.GetWindowTextW(hwnd, title, length + 1)
+        if "B24 设计变更归档" in title.value:
+            found.add(int(hwnd))
+        return True
+
+    user32.EnumWindows(enum_callback(collect), 0)
+    return found
+
+
+def _close_chrome_window(hwnd: int) -> None:
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    user32.PostMessageW.restype = wintypes.BOOL
+    user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
 
 
 def main() -> None:
@@ -59,16 +121,59 @@ def main() -> None:
             from tkinter import ttk
 
             window = tk.Tk()
+            chrome = _chrome_path()
+            opened_chrome_windows: set[int] = set()
+            chrome_launch_baselines: list[set[int]] = []
+
+            def open_page() -> None:
+                if chrome:
+                    before = _chrome_windows()
+                    chrome_launch_baselines.append(before)
+                    try:
+                        subprocess.Popen(
+                            [str(chrome), "--new-window", url],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    except OSError as exc:
+                        logger.warning("启动 Chrome 失败，将使用默认浏览器：%s", exc)
+                        webbrowser.open_new(url)
+                        return
+
+                    attempts = 0
+
+                    def find_opened_window() -> None:
+                        nonlocal attempts
+                        newly_opened = _chrome_windows() - before
+                        opened_chrome_windows.update(newly_opened)
+                        if not newly_opened and attempts < 40 and window.winfo_exists():
+                            attempts += 1
+                            window.after(250, find_opened_window)
+
+                    window.after(250, find_opened_window)
+                else:
+                    webbrowser.open_new(url)
+
+            def close_control() -> None:
+                # Catch a Chrome window that appeared just before the user closed the GUI.
+                current_windows = _chrome_windows()
+                for baseline in chrome_launch_baselines:
+                    opened_chrome_windows.update(current_windows - baseline)
+                for hwnd in opened_chrome_windows:
+                    _close_chrome_window(hwnd)
+                window.destroy()
+
             window.title("B24 设计变更归档")
             window.geometry("400x190")
             window.resizable(False, False)
             frame = ttk.Frame(window, padding=20)
             frame.pack(fill="both", expand=True)
             ttk.Label(frame, text=f"已读取 {len(state.records)} 条 B24 变更", font=("Microsoft YaHei UI", 13)).pack(pady=(4, 16))
-            ttk.Button(frame, text="打开变更台账", command=lambda: webbrowser.open(url)).pack(fill="x", pady=4)
-            ttk.Label(frame, text="关闭此窗口将停止本地服务").pack(pady=10)
+            ttk.Button(frame, text="打开变更台账", command=open_page).pack(fill="x", pady=4)
+            ttk.Label(frame, text="关闭此窗口将关闭本次打开的台账页面").pack(pady=10)
             # 等 Tk 窗口进入事件循环后再打开浏览器，确保桌面窗口与页面同时出现。
-            window.after(250, lambda: webbrowser.open(url))
+            window.protocol("WM_DELETE_WINDOW", close_control)
+            window.after(250, open_page)
             window.mainloop()
     finally:
         server.shutdown()

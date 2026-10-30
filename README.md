@@ -2,7 +2,7 @@
 
 [本次更新说明](CHANGELOG.md)
 
-运行 `python design-archiver.py` 会打开小型控制窗口，并自动在默认浏览器中打开本机 HTML 页面；控制窗口中的“打开变更台账”按钮可再次打开页面，关闭控制窗口即停止服务。终端模式可运行 `python design-archiver.py --no-ui`，直接打开浏览器，按 `Ctrl+C` 停止。
+运行 `python design-archiver.py` 会打开小型控制窗口，并自动在 Chrome 新窗口中打开本机 HTML 页面；控制窗口中的“打开变更台账”按钮可再次打开页面。关闭控制窗口会关闭本次启动器打开的 Chrome 台账窗口并停止本地服务，不会关闭其他 Chrome 窗口。Windows 未安装 Chrome 时改用默认浏览器。终端模式可运行 `python design-archiver.py --no-ui`，直接打开默认浏览器，按 `Ctrl+C` 停止。
 
 首次运行安装依赖：`python -m pip install -r requirements.txt`。复制 `config.example.yaml` 为 `config.yaml`，填写本机 B24 Excel 台账、按 2025-10-01 切换的两个审批表模板和资料源目录。`config.yaml` 包含业务路径，仅留在本机，不同步到 GitHub。PDF 流程需要 Windows 桌面版 Microsoft Word、Bluebeam Revu 20 eXtreme 和系统的“Microsoft Print to PDF”打印机。程序默认查找 Revu 20 标准安装目录；特殊安装路径可通过 `BLUEBEAM_SCRIPT_ENGINE` 指向 `ScriptEngine.exe`。默认成果位于本项目 `output/B24`，页面不显示路径设置；如本机已有 `local_settings.json`，继续使用其中保存的目录。也可通过 `CLOUDSTATION_ROOT` 或 `CLOUDSTATION_ROOT_WINDOWS` 覆盖群晖同步根路径。
 
