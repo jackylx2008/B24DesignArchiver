@@ -111,7 +111,7 @@
   function renderWorkOrders() {
     const list=$('work-order-list');if(!list)return;list.replaceChildren();
     const items=workOrderListItems();
-    const pending=state.workOrders.filter(item=>!['已关联变更','已形成新变更','联系单已作废'].includes(workOrderStatus(item))).length;
+    const pending=state.workOrders.filter(item=>!workOrderIsConfirmed(item)).length;
     $('work-order-count').textContent=`${state.workOrders.length} 条联系单 · ${pending} 条待人工审核 · 新变更与关联保存在 ${state.workOrderData?.store_file||'独立 JSON'}`;
     items.forEach(item=>{
       const row=document.createElement('div');row.className='work-order-item'+(state.workOrderCurrent?.record_id===item.record_id?' active':'');
