@@ -96,6 +96,48 @@ def _close_chrome_window(hwnd: int) -> None:
     user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
 
 
+def _move_chrome_window_to_primary(hwnd: int) -> None:
+    """Move a launched Chrome window to the Windows primary monitor and maximize it."""
+    if sys.platform != "win32":
+        return
+    import ctypes
+    from ctypes import wintypes
+
+    class RECT(ctypes.Structure):
+        _fields_ = [(name, wintypes.LONG) for name in ("left", "top", "right", "bottom")]
+
+    class MONITORINFO(ctypes.Structure):
+        _fields_ = [("cbSize", wintypes.DWORD), ("rcMonitor", RECT), ("rcWork", RECT), ("dwFlags", wintypes.DWORD)]
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+    callback_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HANDLE, wintypes.HDC, ctypes.POINTER(RECT), wintypes.LPARAM)
+    user32.GetMonitorInfoW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MONITORINFO)]
+    user32.GetMonitorInfoW.restype = wintypes.BOOL
+    user32.EnumDisplayMonitors.argtypes = [wintypes.HDC, ctypes.POINTER(RECT), callback_type, wintypes.LPARAM]
+    user32.EnumDisplayMonitors.restype = wintypes.BOOL
+    primary: list[RECT] = []
+
+    def collect(monitor: int, _hdc: int, _rect: object, _lparam: int) -> bool:
+        info = MONITORINFO()
+        info.cbSize = ctypes.sizeof(MONITORINFO)
+        if user32.GetMonitorInfoW(monitor, ctypes.byref(info)) and info.dwFlags & 1:  # MONITORINFOF_PRIMARY
+            primary.append(info.rcWork)
+            return False
+        return True
+
+    user32.EnumDisplayMonitors(None, None, callback_type(collect), 0)
+    if not primary:
+        return
+    work = primary[0]
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.ShowWindow.restype = wintypes.BOOL
+    user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
+    user32.SetWindowPos.restype = wintypes.BOOL
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    user32.SetWindowPos(hwnd, None, work.left, work.top, work.right - work.left, work.bottom - work.top, 0x0014)
+    user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--no-ui", action="store_true", help="直接打开浏览器，不显示控制窗口")
@@ -146,6 +188,8 @@ def main() -> None:
                         nonlocal attempts
                         newly_opened = _chrome_windows() - before
                         opened_chrome_windows.update(newly_opened)
+                        for hwnd in newly_opened:
+                            _move_chrome_window_to_primary(hwnd)
                         if not newly_opened and attempts < 40 and window.winfo_exists():
                             attempts += 1
                             window.after(250, find_opened_window)
