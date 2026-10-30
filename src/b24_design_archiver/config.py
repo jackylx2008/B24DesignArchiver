@@ -56,7 +56,11 @@ def load_config() -> dict:
     app["local_ai_model"] = os.environ.get("LLAMACPP_MODEL", "").strip()
     app["local_ai_api_key"] = os.environ.get("LLAMACPP_API_KEY", "").strip()
     app["local_ai_timeout"] = int(os.environ.get("LLAMACPP_TIMEOUT_SEC", "180"))
-    for key in ("workbook", "template_before", "template_after", "output_root"):
+    app.setdefault(
+        "work_order_json",
+        "${CLOUDSTATION_ROOT}/path/to/work-order-data.json",
+    )
+    for key in ("workbook", "template_before", "template_after", "output_root", "work_order_json"):
         app[key] = _expand(app[key])
     sources = [_expand(value) for value in app["source_directories"]]
     for raw in app.get("legacy_config_files", []):

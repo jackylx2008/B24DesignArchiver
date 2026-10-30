@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import subprocess
 import threading
@@ -21,6 +22,10 @@ from .operations import (
 from .records import append_record_remark, load_records, update_progress_fields, write_record_json, write_records_json
 from .progress_ai import STATES, classify_progress, local_ai_status
 from .sources import SourceIndex
+from .work_orders import (
+    CODE_PATTERNS, STORE_NAME, candidates_for, draft_merged_change, load_store, load_work_order_records,
+    recommend_matches, save_store,
+)
 
 LOGGER = logging.getLogger(__name__)
 WEB_FILE = PROJECT_ROOT / "src" / "b24_design_archiver" / "web" / "index.html"
@@ -37,6 +42,7 @@ class ArchiveState:
         self.records: list[dict] = []
         self.by_id: dict[str, dict] = {}
         self.sync_status = {"running": False, "completed": 0, "total": 0, "copied": 0, "errors": []}
+        self.work_order_match_status = {"running": False, "completed": 0, "total": 0, "errors": []}
         if SETTINGS_FILE.is_file():
             try:
                 saved = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
@@ -47,11 +53,49 @@ class ArchiveState:
         self.reload()
 
     def reload(self) -> None:
-        records = load_records(self.config["workbook"])
-        self.records_json = write_records_json(records, self.output_root())
-        self.records = records
+        historical = load_records(self.config["workbook"])
+        work_order_path = Path(self.config.get(
+            "work_order_json",
+            PROJECT_ROOT / "work-order-data.json",
+        )).expanduser().resolve()
+        self.config["work_order_json"] = work_order_path
+        try:
+            self.work_orders = load_work_order_records(work_order_path)
+        except FileNotFoundError as exc:
+            LOGGER.warning("工作联系单数据不可用，暂不启用关联功能：%s", exc)
+            self.work_orders = []
+        self.work_order_store_path = self.output_root() / STORE_NAME
+        self.work_order_store = load_store(self.work_order_store_path, work_order_path)
+        self.historical_records = historical
+        self.records = historical + self._published_work_order_changes()
+        self.records_json = write_records_json(self.records, self.output_root())
         self.by_id = {record["_id"]: record for record in self.records}
         self.sources = SourceIndex(self.config["source_directories"], [record["变更通知单编号"] for record in self.records])
+
+    def _published_work_order_changes(self) -> list[dict]:
+        records = []
+        used_codes = {str(record.get("变更通知单编号", "")).strip().upper() for record in self.historical_records}
+        for draft in self.work_order_store.get("drafts", []):
+            if draft.get("status") != "已纳入页面":
+                continue
+            values = draft.get("人工确认", {})
+            code = str(values.get("编号", "")).strip()
+            if not code or code.upper() in used_codes:
+                LOGGER.warning("忽略编号为空或重复的新变更草稿：%s", draft.get("draft_id", ""))
+                continue
+            used_codes.add(code.upper())
+            title = str(values.get("说明", "")).strip()
+            specialty = str(values.get("专业", "")).strip()
+            records.append({
+                "_id": f"work-order:{draft['draft_id']}", "_row": "",
+                "审批表编号": "", "提出单位一": "工作联系单归并", "变更原因二": "工作联系单需求归并",
+                "变更内容三": str(values.get("变更内容", "")).strip(),
+                "变更通知单编号": code,
+                "变更编号和说明": f"{code}（{title}）" if title else code,
+                "日期五": str(values.get("日期", "")).strip(), "六版本": "",
+                "是否完成面单": "未填", "何种专业四": specialty, "专业": specialty,
+            })
+        return records
 
     def output_root(self) -> Path:
         return self.config["output_root"]
@@ -67,9 +111,15 @@ class ArchiveState:
                 raise ValueError("输出目录不能与资料源目录重叠")
         if path == self.config["workbook"].parent:
             raise ValueError("输出目录不能是台账所在目录")
+        target_store = path / STORE_NAME
+        if target_store.is_file() and target_store != self.work_order_store_path:
+            raise ValueError("新输出目录已存在工作联系单关联 JSON；请先处理该文件，避免覆盖已有关联数据")
         records_json = write_records_json(self.records, path)
+        if self.work_order_store_path.is_file() and self.work_order_store_path != target_store:
+            save_store(target_store, self.work_order_store)
         SETTINGS_FILE.write_text(json.dumps({"output_root": str(path)}, ensure_ascii=False, indent=2), encoding="utf-8")
         self.config["output_root"] = path
+        self.work_order_store_path = target_store
         self.records_json = records_json
         return str(path)
 
@@ -85,9 +135,220 @@ class ArchiveState:
             for record in aggregate
         }
         return [
-            {**record, **annotations.get(record["_id"], {}), "_output_exists": self.folder(record).is_dir()}
+            {**record, **annotations.get(record["_id"], {}),
+             "_work_order_sources": self._work_order_sources_for_change(record["_id"]),
+             "_output_exists": self.folder(record).is_dir()}
             for record in self.records
         ]
+
+    def _work_order_sources_for_change(self, change_id: str) -> list[dict]:
+        linked_ids = set()
+        for record_id, relation in self.work_order_store.get("relations", {}).items():
+            if change_id in relation.get("change_ids", []):
+                linked_ids.add(record_id)
+        for draft in self.work_order_store.get("drafts", []):
+            if draft.get("status") == "已纳入页面" and f"work-order:{draft.get('draft_id')}" == change_id:
+                linked_ids.update(draft.get("source_record_ids", []))
+        by_work_id = {item["record_id"]: item for item in self.work_orders}
+        return [{"record_id": item["record_id"], "编号": item.get("document_code", ""),
+                 "主题": item.get("subject", ""), "专业": item.get("discipline", "")}
+                for key in linked_ids if (item := by_work_id.get(key))]
+
+    def work_order_payload(self) -> dict:
+        relation_data = self.work_order_store.get("relations", {})
+        records = []
+        for item in self.work_orders:
+            records.append({
+                "record_id": item["record_id"], "document_code": item.get("document_code", ""),
+                "sequence_no": item.get("sequence_no", ""), "folder_date": item.get("folder_date", ""),
+                "subject": item.get("subject", ""), "discipline": item.get("discipline", ""),
+                "需求内容": item.get("需求内容", ""), "status": item.get("status", ""),
+                "是否需要变更": item.get("是否需要变更", ""), "现场是否已经完成": item.get("现场是否已经完成", ""),
+                "作废状态": item.get("作废状态", ""), "relation": relation_data.get(item["record_id"], {}),
+            })
+        drafts = self.work_order_store.get("drafts", [])
+        return {
+            "records": records,
+            "changes": [{"_id": record["_id"], "编号": record.get("变更通知单编号", ""),
+                         "说明": record.get("变更编号和说明", ""), "专业": record.get("专业", ""),
+                         "日期": record.get("日期五", ""), "变更内容": record.get("变更内容三", "")}
+                        for record in self.records],
+            "drafts": drafts,
+            "specialties": sorted({str(record.get("专业", record.get("何种专业四", ""))).strip() for record in self.records
+                                    if str(record.get("专业", record.get("何种专业四", ""))).strip()} |
+                                   {str(item.get("discipline", "")).strip() for item in self.work_orders
+                                    if str(item.get("discipline", "")).strip()}),
+            "store_file": str(self.work_order_store_path),
+        }
+
+    def recommend_work_order_links(self, work_order_id: str) -> dict:
+        item = self.work_order_by_id(work_order_id)
+        if str(item.get("作废状态", "")).strip() == "是":
+            raise ValueError("已作废的工作联系单不能参与 AI 匹配")
+        candidates = candidates_for(item, self.records)
+        matches = recommend_matches(item, candidates, self.config)
+        relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+        status = relation.get("review_status") if relation.get("change_ids") else "待人工审核"
+        relation.update({"review_status": status, "ai_candidates": matches, "ai_updated_at": datetime.now().astimezone().isoformat(timespec="seconds")})
+        save_store(self.work_order_store_path, self.work_order_store)
+        return {"record_id": work_order_id, "matches": matches, "relation": relation}
+
+    def start_work_order_match_batch(self) -> dict:
+        if self.work_order_match_status["running"]:
+            return dict(self.work_order_match_status)
+        relations = self.work_order_store.get("relations", {})
+        pending = [item["record_id"] for item in self.work_orders
+                   if str(item.get("作废状态", "")).strip() != "是"
+                   and not relations.get(item["record_id"], {}).get("ai_updated_at")
+                   and not relations.get(item["record_id"], {}).get("confirmed_at")
+                   and not any(item["record_id"] in draft.get("source_record_ids", [])
+                               for draft in self.work_order_store.get("drafts", []))]
+        self.work_order_match_status = {"running": True, "completed": 0, "total": len(pending), "errors": []}
+
+        def run() -> None:
+            for work_order_id in pending:
+                try:
+                    item = self.work_order_by_id(work_order_id)
+                    candidates = candidates_for(item, self.records)
+                    matches = recommend_matches(item, candidates, self.config)
+                    with self.lock:
+                        relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+                        status = relation.get("review_status") if relation.get("change_ids") else "待人工审核"
+                        relation.update({"review_status": status, "ai_candidates": matches,
+                                         "ai_updated_at": datetime.now().astimezone().isoformat(timespec="seconds")})
+                        save_store(self.work_order_store_path, self.work_order_store)
+                except Exception as exc:
+                    LOGGER.exception("AI 工作联系单匹配失败：%s", work_order_id)
+                    with self.lock:
+                        self.work_order_match_status["errors"].append({"record_id": work_order_id, "error": str(exc)})
+                finally:
+                    with self.lock:
+                        self.work_order_match_status["completed"] += 1
+            with self.lock:
+                self.work_order_match_status["running"] = False
+
+        threading.Thread(target=run, name="work-order-ai-match", daemon=True).start()
+        return dict(self.work_order_match_status)
+
+    def work_order_by_id(self, work_order_id: str) -> dict:
+        item = next((record for record in self.work_orders if record["record_id"] == work_order_id), None)
+        if item is None:
+            raise KeyError(f"找不到工作联系单条目：{work_order_id}")
+        return item
+
+    def set_work_order_links(self, work_order_id: str, change_ids: list[str]) -> dict:
+        item = self.work_order_by_id(work_order_id)
+        if str(item.get("作废状态", "")).strip() == "是":
+            raise ValueError("已作废的工作联系单不能关联变更")
+        if not isinstance(change_ids, list) or not change_ids:
+            raise ValueError("请选择至少一条要关联的变更")
+        if not all(change_id in self.by_id for change_id in change_ids):
+            raise ValueError("关联的变更中包含当前台账不存在的条目")
+        relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+        has_open_draft = any(draft.get("draft_id") == relation.get("draft_id") and draft.get("status") == "草稿"
+                             for draft in self.work_order_store.get("drafts", []))
+        has_published_draft = any(draft.get("draft_id") == relation.get("draft_id") and draft.get("status") == "已纳入页面"
+                                  for draft in self.work_order_store.get("drafts", []))
+        status = "新变更草稿" if has_open_draft else "已形成新变更" if has_published_draft else "已关联变更"
+        relation.update({"review_status": status, "change_ids": list(dict.fromkeys(change_ids)),
+                         "confirmed_at": datetime.now().astimezone().isoformat(timespec="seconds")})
+        save_store(self.work_order_store_path, self.work_order_store)
+        return relation
+
+    def create_work_order_draft(self, work_order_ids: list[str]) -> dict:
+        unique_ids = list(dict.fromkeys(str(item) for item in work_order_ids))
+        if not unique_ids:
+            raise ValueError("请选择至少一条工作联系单")
+        selected = [self.work_order_by_id(item) for item in unique_ids]
+        if any(str(item.get("作废状态", "")).strip() == "是" for item in selected):
+            raise ValueError("选择中包含已作废的工作联系单，请移除后再生成草稿")
+        existing_draft_ids = {source_id for draft in self.work_order_store.get("drafts", [])
+                              if draft.get("status") == "草稿" for source_id in draft.get("source_record_ids", [])}
+        already_published = {source_id for draft in self.work_order_store.get("drafts", [])
+                             if draft.get("status") == "已纳入页面" for source_id in draft.get("source_record_ids", [])}
+        blocked = set(unique_ids) & (existing_draft_ids | already_published)
+        if blocked:
+            raise ValueError(f"以下联系单已在新变更草稿中，需先处理原草稿：{', '.join(sorted(blocked))}")
+        draft = draft_merged_change(selected, self.records, self.config)
+        self.work_order_store.setdefault("drafts", []).append(draft)
+        for work_order_id in unique_ids:
+            relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+            relation.update({"review_status": "新变更草稿", "draft_id": draft["draft_id"]})
+        save_store(self.work_order_store_path, self.work_order_store)
+        return draft
+
+    def publish_work_order_draft(self, draft_id: str, fields: dict) -> dict:
+        draft = next((item for item in self.work_order_store.get("drafts", []) if item.get("draft_id") == draft_id), None)
+        if draft is None:
+            raise KeyError("找不到新变更草稿")
+        if draft.get("status") == "已纳入页面":
+            raise ValueError("该草稿已经纳入主页面")
+        confirmed = {
+            "编号": str(fields.get("编号", "")).strip(),
+            "日期": str(fields.get("日期", "")).strip(),
+            "专业": str(fields.get("专业", "")).strip(),
+            "说明": str(fields.get("说明", "")).strip(),
+            "变更内容": str(fields.get("变更内容", "")).strip(),
+        }
+        if any(not value for value in confirmed.values()):
+            raise ValueError("请填写编号、日期、专业、说明和变更内容")
+        if not confirmed["专业"] or len(confirmed["专业"]) > 40:
+            raise ValueError("请填写有效专业")
+        pattern = CODE_PATTERNS.get(confirmed["专业"])
+        if pattern and not re.fullmatch(pattern, confirmed["编号"], re.IGNORECASE):
+            raise ValueError("变更编号格式与所选专业不匹配，请按现有编号规则填写")
+        if any(record.get("变更通知单编号", "").strip().upper() == confirmed["编号"].upper() for record in self.records):
+            raise ValueError(f"变更编号已存在：{confirmed['编号']}")
+        if len(confirmed["变更内容"]) > 6000:
+            raise ValueError("变更内容不能超过 6000 个字符")
+        date_value = confirmed["日期"]
+        try:
+            confirmed["日期"] = datetime.fromisoformat(date_value).strftime("%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("日期请使用 YYYY-MM-DD 格式") from exc
+        draft["人工确认"] = confirmed
+        draft["status"] = "已纳入页面"
+        draft["confirmed_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        for work_order_id in draft.get("source_record_ids", []):
+            relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+            linked_ids = list(dict.fromkeys([*relation.get("change_ids", []), f"work-order:{draft_id}"]))
+            relation.update({"review_status": "已形成新变更", "draft_id": draft_id,
+                             "change_ids": linked_ids})
+        save_store(self.work_order_store_path, self.work_order_store)
+        self.reload()
+        return {"draft": draft, "records_count": len(self.records)}
+
+    def update_work_order_draft(self, draft_id: str, fields: dict) -> dict:
+        draft = next((item for item in self.work_order_store.get("drafts", []) if item.get("draft_id") == draft_id), None)
+        if draft is None:
+            raise KeyError("找不到新变更草稿")
+        if draft.get("status") == "已纳入页面":
+            raise ValueError("已纳入页面的变更不能作为草稿修改")
+        allowed = {"编号", "日期", "专业", "说明", "变更内容"}
+        confirmed = dict(draft.get("人工确认", {}))
+        for key, value in fields.items():
+            if key in allowed:
+                confirmed[key] = str(value).strip()
+        draft["人工确认"] = confirmed
+        draft["草稿更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        save_store(self.work_order_store_path, self.work_order_store)
+        return draft
+
+    def cancel_work_order_draft(self, draft_id: str) -> dict:
+        draft = next((item for item in self.work_order_store.get("drafts", []) if item.get("draft_id") == draft_id), None)
+        if draft is None:
+            raise KeyError("找不到新变更草稿")
+        if draft.get("status") != "草稿":
+            raise ValueError("只有尚未纳入页面的草稿可以取消")
+        draft["status"] = "已取消"
+        draft["cancelled_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+        for work_order_id in draft.get("source_record_ids", []):
+            relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
+            if relation.get("draft_id") == draft_id:
+                relation.pop("draft_id", None)
+                relation["review_status"] = "待人工审核"
+        save_store(self.work_order_store_path, self.work_order_store)
+        return draft
 
     def add_remark(self, record_id: str, text: str) -> list[dict[str, str]]:
         if record_id not in self.by_id:
@@ -297,6 +558,12 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     with state.lock:
                         records = state.records_for_page()
                         self._json({"records": records, "workbook": str(state.config["workbook"]), "output_root": str(state.output_root()), "records_json": str(state.records_json)})
+                elif parsed.path == "/api/work-orders":
+                    with state.lock:
+                        self._json(state.work_order_payload())
+                elif parsed.path == "/api/work-order-match-status":
+                    with state.lock:
+                        self._json(dict(state.work_order_match_status))
                 elif parsed.path == "/api/local-ai-status":
                     self._json(local_ai_status(state.config))
                 elif parsed.path == "/api/sync-status":
@@ -368,6 +635,33 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                     elif self.path == "/api/progress-status":
                         updated = state.set_progress_status(str(body.get("id", "")), str(body.get("status", "")))
                         self._json(updated)
+                    elif self.path == "/api/work-order-match":
+                        self._json(state.recommend_work_order_links(str(body.get("record_id", ""))))
+                    elif self.path == "/api/work-order-match-batch":
+                        self._json(state.start_work_order_match_batch())
+                    elif self.path == "/api/work-order-links":
+                        ids = body.get("change_ids")
+                        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+                            raise ValueError("关联变更编号格式无效")
+                        relation = state.set_work_order_links(str(body.get("record_id", "")), ids)
+                        self._json({"relation": relation})
+                    elif self.path == "/api/work-order-draft":
+                        ids = body.get("work_order_ids")
+                        if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
+                            raise ValueError("联系单编号格式无效")
+                        self._json({"draft": state.create_work_order_draft(ids)})
+                    elif self.path == "/api/work-order-draft-update":
+                        fields = body.get("fields")
+                        if not isinstance(fields, dict):
+                            raise ValueError("新变更草稿字段格式无效")
+                        self._json({"draft": state.update_work_order_draft(str(body.get("draft_id", "")), fields)})
+                    elif self.path == "/api/work-order-draft-cancel":
+                        self._json({"draft": state.cancel_work_order_draft(str(body.get("draft_id", "")))})
+                    elif self.path == "/api/work-order-publish":
+                        fields = body.get("fields")
+                        if not isinstance(fields, dict):
+                            raise ValueError("新变更字段格式无效")
+                        self._json(state.publish_work_order_draft(str(body.get("draft_id", "")), fields))
                     elif self.path == "/api/open":
                         record = state.get_record(str(body.get("id", "")))
                         folder = state.folder(record)
