@@ -256,6 +256,27 @@ class ArchiveState:
         save_store(self.work_order_store_path, self.work_order_store)
         return relation
 
+    def mark_work_order_ai_result_wrong(self, work_order_id: str) -> dict:
+        item = self.work_order_by_id(work_order_id)
+        if str(item.get("作废状态", "")).strip() == "是":
+            raise ValueError("已作废的工作联系单不参与 AI 结果审核")
+        relation = self.work_order_store.get("relations", {}).get(work_order_id)
+        if not relation or not relation.get("ai_updated_at"):
+            raise ValueError("该工作联系单尚无 AI 匹配结果可供审核")
+        ai_updated_at = relation["ai_updated_at"]
+        reviews = relation.setdefault("ai_manual_reviews", [])
+        existing = next((review for review in reviews
+                         if review.get("ai_updated_at") == ai_updated_at and review.get("result") == "错误"), None)
+        if existing is None:
+            reviews.append({
+                "ai_updated_at": ai_updated_at,
+                "result": "错误",
+                "reviewer": "人工",
+                "reviewed_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            })
+        save_store(self.work_order_store_path, self.work_order_store)
+        return relation
+
     def create_work_order_draft(self, work_order_ids: list[str]) -> dict:
         unique_ids = list(dict.fromkeys(str(item) for item in work_order_ids))
         if not unique_ids:
@@ -645,6 +666,9 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                         if not isinstance(ids, list) or not all(isinstance(item, str) for item in ids):
                             raise ValueError("关联变更编号格式无效")
                         relation = state.set_work_order_links(str(body.get("record_id", "")), ids)
+                        self._json({"relation": relation})
+                    elif self.path == "/api/work-order-ai-review":
+                        relation = state.mark_work_order_ai_result_wrong(str(body.get("record_id", "")))
                         self._json({"relation": relation})
                     elif self.path == "/api/work-order-draft":
                         ids = body.get("work_order_ids")
