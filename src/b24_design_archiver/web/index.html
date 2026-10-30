@@ -103,7 +103,8 @@
   const workOrderNameCollator=new Intl.Collator('zh-CN',{numeric:true,sensitivity:'base'});
   function workOrderSortName(item) {return String(item.folder_path||'').split(/[\\/]/).filter(Boolean).pop()||item.document_code||item.record_id}
   function workOrderIsConfirmed(item) {return item.relation?.review_status==='已关联变更'&&Boolean(item.relation?.confirmed_at)&&(item.relation?.change_ids||[]).length>0}
-  function workOrderListItems() {const query=$('work-order-search').value.trim().toLocaleLowerCase();return state.workOrders.filter(item=>!workOrderIsConfirmed(item)&&(!query||[item.document_code,item.subject,item.discipline,item['需求内容']].join(' ').toLocaleLowerCase().includes(query)))}
+  function workOrderIsVoid(item) {return String(item['作废状态']||'').trim()==='是'}
+  function workOrderListItems() {const query=$('work-order-search').value.trim().toLocaleLowerCase();return state.workOrders.filter(item=>!workOrderIsVoid(item)&&!workOrderIsConfirmed(item)&&(!query||[item.document_code,item.subject,item.discipline,item['需求内容']].join(' ').toLocaleLowerCase().includes(query)))}
   async function loadWorkOrderData() {state.workOrderData=await api('/api/work-orders');state.workOrders=(state.workOrderData.records||[]).sort((a,b)=>workOrderNameCollator.compare(workOrderSortName(a),workOrderSortName(b)));renderWorkOrders();renderWorkOrderDrafts()}
   function showWorkOrderMatchProgress(status) {state.workOrderMatchRunning=Boolean(status.running);$('work-order-batch-progress').textContent=status.running?`AI 匹配中 ${status.completed}/${status.total}`:`上次批量匹配完成 ${status.completed}/${status.total}${status.errors?.length?`，失败 ${status.errors.length} 条`:''}`;$('work-order-batch-match').disabled=Boolean(status.running);$('work-order-batch-match').textContent=status.running?'批量匹配中…':'AI 批量推荐未审核条目';$('work-order-match').disabled=Boolean(status.running)||!state.workOrderCurrent||workOrderStatus(state.workOrderCurrent)==='联系单已作废';$('work-order-create-draft').disabled=Boolean(status.running)||!state.workOrderSelected.size}
   async function pollWorkOrderMatch() {try{const status=await api('/api/work-order-match-status');showWorkOrderMatchProgress(status);if(status.running){setTimeout(pollWorkOrderMatch,1400)}else{await loadWorkOrderData();if(status.total)notify(`工作联系单 AI 批量匹配完成：${status.completed}/${status.total}${status.errors?.length?`，失败 ${status.errors.length} 条`:''}`)}}catch(e){notify(e.message)}}
@@ -111,7 +112,7 @@
   function renderWorkOrders() {
     const list=$('work-order-list');if(!list)return;list.replaceChildren();
     const items=workOrderListItems();
-    const pending=state.workOrders.filter(item=>!workOrderIsConfirmed(item)).length;
+    const pending=state.workOrders.filter(item=>!workOrderIsVoid(item)&&!workOrderIsConfirmed(item)).length;
     $('work-order-count').textContent=`${state.workOrders.length} 条联系单 · ${pending} 条待人工审核 · 新变更与关联保存在 ${state.workOrderData?.store_file||'独立 JSON'}`;
     items.forEach(item=>{
       const row=document.createElement('div');row.className='work-order-item'+(state.workOrderCurrent?.record_id===item.record_id?' active':'');
