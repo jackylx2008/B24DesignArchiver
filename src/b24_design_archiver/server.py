@@ -161,6 +161,7 @@ class ArchiveState:
             records.append({
                 "record_id": item["record_id"], "document_code": item.get("document_code", ""),
                 "sequence_no": item.get("sequence_no", ""), "folder_date": item.get("folder_date", ""),
+                "folder_path": item.get("folder_path", ""),
                 "subject": item.get("subject", ""), "discipline": item.get("discipline", ""),
                 "需求内容": item.get("需求内容", ""), "status": item.get("status", ""),
                 "是否需要变更": item.get("是否需要变更", ""), "现场是否已经完成": item.get("现场是否已经完成", ""),
