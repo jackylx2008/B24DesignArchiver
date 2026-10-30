@@ -1,8 +1,8 @@
 """B24 设计变更归档启动器。
 
 用途：
-  读取 B24 台账与路径配置，启动仅供本机访问的 HTML 页面。点击控制窗口中的
-  “打开变更台账”后，在浏览器中逐条查看变更并执行审批表、复制、压缩和 PDF 操作。
+  读取 B24 台账与路径配置，启动仅供本机访问的 HTML 页面，并自动在浏览器中打开。
+  控制窗口可查看读取状态、重新打开页面；关闭窗口后本地服务停止。
 
 配置文件：
   config.yaml 指定台账、模板、资料源目录与默认输出目录；如已有本机
@@ -67,6 +67,8 @@ def main() -> None:
             ttk.Label(frame, text=f"已读取 {len(state.records)} 条 B24 变更", font=("Microsoft YaHei UI", 13)).pack(pady=(4, 16))
             ttk.Button(frame, text="打开变更台账", command=lambda: webbrowser.open(url)).pack(fill="x", pady=4)
             ttk.Label(frame, text="关闭此窗口将停止本地服务").pack(pady=10)
+            # 等 Tk 窗口进入事件循环后再打开浏览器，确保桌面窗口与页面同时出现。
+            window.after(250, lambda: webbrowser.open(url))
             window.mainloop()
     finally:
         server.shutdown()
