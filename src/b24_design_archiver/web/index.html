@@ -113,7 +113,8 @@
     const list=$('work-order-list');if(!list)return;list.replaceChildren();
     const items=workOrderListItems();
     const pending=state.workOrders.filter(item=>!workOrderIsVoid(item)&&!workOrderIsConfirmed(item)).length;
-    $('work-order-count').textContent=`${state.workOrders.length} 条联系单 · ${pending} 条待人工审核 · 新变更与关联保存在 ${state.workOrderData?.store_file||'独立 JSON'}`;
+    const voidCount=state.workOrders.filter(workOrderIsVoid).length;
+    $('work-order-count').textContent=`联系单总数 ${state.workOrders.length} 条 · 待人工审核 ${pending} 条 · 工作联系单作废 ${voidCount} 条 · 新变更与关联保存在 ${state.workOrderData?.store_file||'独立 JSON'}`;
     items.forEach(item=>{
       const row=document.createElement('div');row.className='work-order-item'+(state.workOrderCurrent?.record_id===item.record_id?' active':'');
       const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.checked=state.workOrderSelected.has(item.record_id);checkbox.disabled=['新变更草稿','已形成新变更','联系单已作废'].includes(workOrderStatus(item));checkbox.title=checkbox.disabled?'该联系单已作废或已经加入新变更草稿':'';
