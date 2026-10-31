@@ -156,24 +156,46 @@ class ArchiveState:
 
     def work_order_payload(self) -> dict:
         relation_data = self.work_order_store.get("relations", {})
+        drafts = self.work_order_store.get("drafts", [])
+        changes = [{"_id": record["_id"], "编号": record.get("变更通知单编号", ""),
+                    "说明": record.get("变更编号和说明", ""), "专业": record.get("专业", ""),
+                    "日期": record.get("日期五", ""), "变更内容": record.get("变更内容三", "")}
+                   for record in self.records]
+        changes_by_id = {item["_id"]: item for item in changes}
         records = []
         for item in self.work_orders:
+            relation = relation_data.get(item["record_id"], {})
+            linked_ids = relation.get("change_ids", []) if relation.get("confirmed_at") else []
+            linked_changes = [changes_by_id[change_id] for change_id in linked_ids if change_id in changes_by_id]
+            published_drafts = [draft for draft in drafts if draft.get("status") == "已纳入页面"
+                                and item["record_id"] in draft.get("source_record_ids", [])]
+            for draft in published_drafts:
+                values = draft.get("人工确认", {})
+                code = str(values.get("编号", "")).strip()
+                if code:
+                    linked_changes.append({"编号": code, "说明": f"{code}（{values.get('说明', '').strip()}）"})
+            corresponding_changes = list(dict.fromkeys(
+                str(change.get("说明") or change.get("编号", "")).strip()
+                for change in linked_changes if change.get("说明") or change.get("编号")
+            ))
             records.append({
-                "record_id": item["record_id"], "document_code": item.get("document_code", ""),
-                "sequence_no": item.get("sequence_no", ""), "folder_date": item.get("folder_date", ""),
-                "folder_path": item.get("folder_path", ""),
-                "subject": item.get("subject", ""), "discipline": item.get("discipline", ""),
-                "需求内容": item.get("需求内容", ""), "status": item.get("status", ""),
-                "是否需要变更": item.get("是否需要变更", ""), "现场是否已经完成": item.get("现场是否已经完成", ""),
-                "作废状态": item.get("作废状态", ""), "relation": relation_data.get(item["record_id"], {}),
+                "record_id": item["record_id"], "discipline": item.get("discipline", ""),
+                "sequence_no": item.get("sequence_no", ""), "document_code": item.get("document_code", ""),
+                "folder_date": item.get("folder_date", ""), "subject": item.get("subject", ""),
+                "folder_path": item.get("folder_path", ""), "files": item.get("files", []),
+                "需求内容": item.get("需求内容", ""), "致送单位": item.get("致送单位", ""),
+                "对应的变更": "、".join(corresponding_changes),
+                "是否已经转化为变更": "是" if corresponding_changes else "否",
+                "是否需要转化为变更": self.work_order_store.get("conversion_decisions", {}).get(item["record_id"], ""),
+                "现场是否已经完成": item.get("现场是否已经完成", ""), "作废状态": item.get("作废状态", ""),
+                "status": item.get("status", ""), "status_label": item.get("status_label", ""),
+                "warnings": item.get("warnings", []), "relation": relation_data.get(item["record_id"], {}),
             })
-        drafts = self.work_order_store.get("drafts", [])
         return {
             "records": records,
-            "changes": [{"_id": record["_id"], "编号": record.get("变更通知单编号", ""),
-                         "说明": record.get("变更编号和说明", ""), "专业": record.get("专业", ""),
-                         "日期": record.get("日期五", ""), "变更内容": record.get("变更内容三", "")}
-                        for record in self.records],
+            "columns": ["专业", "编号", "日期", "致送单位", "主题", "需求内容",
+                        "对应的变更", "是否需要转化为变更", "是否已经转化为变更"],
+            "changes": changes,
             "drafts": drafts,
             "specialties": sorted({str(record.get("专业", record.get("何种专业四", ""))).strip() for record in self.records
                                     if str(record.get("专业", record.get("何种专业四", ""))).strip()} |
@@ -255,6 +277,18 @@ class ArchiveState:
                          "confirmed_at": datetime.now().astimezone().isoformat(timespec="seconds")})
         save_store(self.work_order_store_path, self.work_order_store)
         return relation
+
+    def set_work_order_conversion_decision(self, work_order_id: str, decision: str) -> str:
+        self.work_order_by_id(work_order_id)
+        if decision not in {"", "是", "否"}:
+            raise ValueError("是否需要转化为变更只能选择是、否或未填写")
+        decisions = self.work_order_store.setdefault("conversion_decisions", {})
+        if decision:
+            decisions[work_order_id] = decision
+        else:
+            decisions.pop(work_order_id, None)
+        save_store(self.work_order_store_path, self.work_order_store)
+        return decision
 
     def mark_work_order_ai_result_wrong(self, work_order_id: str) -> dict:
         item = self.work_order_by_id(work_order_id)
@@ -667,6 +701,10 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                             raise ValueError("关联变更编号格式无效")
                         relation = state.set_work_order_links(str(body.get("record_id", "")), ids)
                         self._json({"relation": relation})
+                    elif self.path == "/api/work-order-conversion-decision":
+                        decision = state.set_work_order_conversion_decision(
+                            str(body.get("record_id", "")), str(body.get("decision", "")))
+                        self._json({"decision": decision})
                     elif self.path == "/api/work-order-ai-review":
                         relation = state.mark_work_order_ai_result_wrong(str(body.get("record_id", "")))
                         self._json({"relation": relation})
