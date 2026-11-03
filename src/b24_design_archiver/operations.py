@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import re
 import shutil
@@ -12,7 +13,9 @@ import zipfile
 from datetime import date
 from pathlib import Path
 
+from docx.enum.table import WD_ROW_HEIGHT_RULE
 from docx import Document
+from docx.shared import Cm, Pt
 
 from .bluebeam_cli import combine_and_print_a4
 
@@ -30,6 +33,9 @@ def filesystem_path(path: Path) -> Path:
 
 
 def record_directory(record: dict, output_root: Path) -> Path:
+    folder_name = str(record.get("_folder_name", "")).strip()
+    if folder_name:
+        return output_root / safe_name(folder_name, 160)
     raw_id = record["变更通知单编号"]
     change_id = safe_name(raw_id, 48)
     description = record.get("变更编号和说明", "")
@@ -82,6 +88,288 @@ def generate_approval(record: dict, config: dict, folder: Path) -> Path:
     finally:
         temporary.unlink(missing_ok=True)
     return target
+
+
+def generate_work_order_notice(
+    record: dict, config: dict, folder: Path, has_appendix: bool, content_font_pt: float | None = None,
+) -> Path:
+    """Fill the blank B24 design-change notice form from confirmed draft fields."""
+    template = Path(config.get("template_notice") or (Path(__file__).resolve().parents[2] / "B24_设计变更通知单_模板.docx"))
+    if not template.is_file():
+        raise FileNotFoundError(f"找不到设计变更通知单模板：{template}")
+    target = folder / f"{safe_name(record['变更通知单编号'])}_设计变更通知单.docx"
+    document = Document(template)
+    if not document.tables:
+        raise ValueError("设计变更通知单模板没有表格")
+    table = document.tables[0]
+
+    def set_cell(cell, lines: list[str]) -> None:
+        paragraph = cell.paragraphs[0]
+        for run in paragraph.runs:
+            run.text = ""
+        run = paragraph.add_run(lines[0])
+        if content_font_pt is not None:
+            run.font.size = Pt(content_font_pt)
+        for line in lines[1:]:
+            run.add_break()
+            run.add_text(line)
+        if content_font_pt is not None:
+            run.font.size = Pt(content_font_pt)
+        for extra in cell.paragraphs[1:]:
+            extra._element.getparent().remove(extra._element)
+
+    raw_date = str(record.get("日期五", "")).strip()[:10]
+    try:
+        parsed_date = date.fromisoformat(raw_date)
+    except ValueError as exc:
+        raise ValueError("变更日期无效，无法填写设计变更通知单") from exc
+    notice_date = f"{parsed_date.year}年{parsed_date.month:02d}月{parsed_date.day:02d}日"
+    content = str(record.get("变更内容三", "")).strip()
+    if not content:
+        raise ValueError("变更内容为空，无法填写设计变更通知单")
+    ending = ["详见附图", "以下空白"] if has_appendix else ["以下空白"]
+    set_cell(table.cell(0, 7), [str(record.get("变更通知单编号", "")).strip()])
+    set_cell(table.cell(1, 7), [str(record.get("何种专业四", record.get("专业", ""))).strip()])
+    set_cell(table.cell(2, 7), [notice_date])
+    set_cell(table.cell(4, 2), [content, *ending])
+    set_cell(table.cell(7, 2), [notice_date])
+    # Expand the variable content row to use the printable A4 page area.
+    # Retain a small reserve for the form note below the table and the footer.
+    section = document.sections[0]
+    body_row_index = 4
+    other_rows_height = sum(
+        row.height or 0 for index, row in enumerate(table.rows) if index != body_row_index
+    )
+    page_body_height = section.page_height - section.top_margin - section.bottom_margin
+    reserved_after_table = Cm(1.8)
+    target_height = page_body_height - reserved_after_table - other_rows_height
+    body_row = table.rows[body_row_index]
+    body_row.height = max(body_row.height or 0, target_height)
+    body_row.height_rule = WD_ROW_HEIGHT_RULE.AT_LEAST
+    folder.mkdir(parents=True, exist_ok=True)
+    document.save(target)
+    return target
+
+
+def render_work_order_notice_artifacts(record: dict, config: dict, has_appendix: bool) -> tuple[bytes, bytes]:
+    with tempfile.TemporaryDirectory(prefix="b24-notice-preview-") as temporary_dir:
+        folder = Path(temporary_dir)
+        from pypdf import PdfReader
+        if os.name != "nt":
+            raise RuntimeError("Word 转 PDF 目前需要 Windows 和桌面版 Microsoft Word")
+        import pythoncom
+        import win32com.client
+
+        # Reduce only the variable change-content text until Word confirms that
+        # the form fits on one portrait A4 sheet. Keep a readable lower bound.
+        pythoncom.CoInitialize()
+        word = None
+        try:
+            word = win32com.client.DispatchEx("Word.Application")
+            word.Visible = False
+            word.DisplayAlerts = 0
+            for content_font_pt in (None, 10.0, 9.5, 9.0, 8.5, 8.0, 7.5, 7.0):
+                attempt = folder / ("template-size" if content_font_pt is None else f"font-{content_font_pt:g}")
+                notice_docx = generate_work_order_notice(
+                    record, config, attempt, has_appendix, content_font_pt=content_font_pt,
+                )
+                preview_pdf = attempt / f"{notice_docx.stem}.pdf"
+                _export_word_to_pdf(word, notice_docx, preview_pdf)
+                reader = PdfReader(str(preview_pdf))
+                if len(reader.pages) != 1:
+                    continue
+                page = reader.pages[0]
+                width, height = float(page.mediabox.width), float(page.mediabox.height)
+                a4_width, a4_height = 595.276, 841.89
+                if abs(width - a4_width) <= 4 and abs(height - a4_height) <= 4:
+                    return preview_pdf.read_bytes(), notice_docx.read_bytes()
+        finally:
+            if word is not None:
+                word.Quit()
+            pythoncom.CoUninitialize()
+        raise ValueError("变更内容过长，通知单无法在 7 磅以上字号下排入一张 A4 纸；请精简内容后重试")
+
+
+def render_approval_preview_artifacts(record: dict, config: dict) -> tuple[bytes, bytes]:
+    """Render the approval PDF and retain the exact Word file used to make it."""
+    with tempfile.TemporaryDirectory(prefix="b24-approval-preview-") as temporary_dir:
+        folder = Path(temporary_dir)
+        approval_docx = generate_approval(record, config, folder)
+        preview_pdf = folder / f"{approval_docx.stem}.pdf"
+        _word_to_pdf(approval_docx, preview_pdf)
+        return preview_pdf.read_bytes(), approval_docx.read_bytes()
+
+
+def render_approval_preview_pdf(record: dict, config: dict) -> bytes:
+    return render_approval_preview_artifacts(record, config)[0]
+
+
+def remove_blank_pdf_pages(pdf_bytes: bytes) -> tuple[bytes, list[int]]:
+    """Drop textless, imageless pages from the generated approval form only."""
+    from pypdf import PdfReader, PdfWriter
+
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    if len(reader.pages) <= 1:
+        return pdf_bytes, []
+    writer = PdfWriter()
+    removed: list[int] = []
+    kept = 0
+    for index, page in enumerate(reader.pages):
+        try:
+            text = (page.extract_text() or "").strip()
+            has_text = bool(text)
+            has_images = any(True for _ in page.images)
+            compact_text = re.sub(r"\s+", "", text)
+            footer_only = (
+                not has_images and len(compact_text) <= 60
+                and "工程变更洽商管理办法" in compact_text
+            )
+        except Exception:
+            # If content inspection fails, preserve the page for human review.
+            has_text, has_images, footer_only = True, True, False
+        if index > 0 and not has_images and (not has_text or footer_only):
+            removed.append(index + 1)
+            continue
+        writer.add_page(page)
+        kept += 1
+    if not kept:
+        return pdf_bytes, []
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue(), removed
+
+
+def append_work_order_appendices(approval_pdf: bytes, source_pdfs: list[tuple[Path, str]]) -> tuple[bytes, int]:
+    """Append source attachment pages after the reviewed change approval form.
+
+    Standalone attachment PDFs contribute every page. An issued work-order PDF
+    includes its one-page form first, so only its following pages are drawings.
+    """
+    from pypdf import PdfReader, PdfWriter
+
+    approval_reader = PdfReader(io.BytesIO(approval_pdf))
+    approval_page_count = len(approval_reader.pages)
+    writer = PdfWriter()
+    for page in approval_reader.pages:
+        writer.add_page(page)
+    appended = 0
+    for source, role in source_pdfs:
+        reader = PdfReader(str(filesystem_path(source)))
+        start_page = 1 if role == "issued_pdf" else 0
+        for page in reader.pages[start_page:]:
+            writer.add_page(page)
+            appended += 1
+    output = io.BytesIO()
+    writer.write(output)
+    return output.getvalue(), approval_page_count
+
+
+def pdf_page_count(pdf_bytes: bytes) -> int:
+    from pypdf import PdfReader
+
+    return len(PdfReader(io.BytesIO(pdf_bytes)).pages)
+
+
+def work_order_directory_name(record: dict) -> str:
+    code = str(record.get("变更通知单编号", "")).strip()
+    description = str(record.get("变更编号和说明", "")).strip()
+    if description.startswith(code):
+        description = description[len(code):].strip("（）() _-")
+    return safe_name(f"{safe_name(code, 48)}（{description}）" if description else code, 160)
+
+
+def _copy_source_files(items: list[tuple[Path, str]], destination: Path) -> list[str]:
+    copied: list[str] = []
+    newly_copied: list[Path] = []
+    origin_by_name: dict[str, tuple[Path, str]] = {}
+    try:
+        for source, origin in items:
+            target = destination / source.name
+            existing_origin = origin_by_name.get(source.name.casefold())
+            if not filesystem_path(target).exists():
+                _copy_file(source, target)
+                newly_copied.append(target)
+                origin_by_name[source.name.casefold()] = (source, origin)
+                copied.append(str(target))
+                continue
+            if existing_origin and _same_file(existing_origin[0], source):
+                continue
+            if not existing_origin and _same_file(source, target):
+                origin_by_name[source.name.casefold()] = (source, origin)
+                continue
+            # Keep colliding originals' filenames intact by placing them in a
+            # subfolder named after their source contact.
+            origin_folder = safe_name(origin or source.parent.name, 72)
+            conflict_folder = destination / origin_folder
+            conflict_folder.mkdir(parents=True, exist_ok=True)
+            conflict_target = conflict_folder / source.name
+            if filesystem_path(conflict_target).exists():
+                if _same_file(source, conflict_target):
+                    continue
+                raise FileExistsError(f"同一联系单中存在同名但内容不同的附件：{source.name}")
+            _copy_file(source, conflict_target)
+            newly_copied.append(conflict_target)
+            copied.append(str(conflict_target))
+    except Exception:
+        for target in newly_copied:
+            target.unlink(missing_ok=True)
+        raise
+    return copied
+
+
+def build_work_order_change_package(
+    record: dict,
+    config: dict,
+    reviewed_pdf: bytes,
+    reviewed_docx: bytes,
+    source_drawings: list[tuple[Path, str]],
+    output_parent: Path,
+) -> tuple[Path, list[str]]:
+    """Build a complete folder without changing any work-order source files."""
+    for source, _ in source_drawings:
+        try:
+            with filesystem_path(source).open("rb") as stream:
+                stream.read(1)
+        except PermissionError as exc:
+            code = getattr(exc, "winerror", None)
+            detail = "文件被占用" if code == 32 else "访问被拒绝"
+            code_label = f"Windows 错误 {code}" if code is not None else "系统拒绝读取"
+            raise PermissionError(
+                f"无法读取联系单原始 DWG「{source.name}」（{detail}，{code_label}）。"
+                "请检查源文件的读取权限或同步状态后重试；程序没有修改原始文件。"
+            ) from exc
+    folder_name = str(record.get("_folder_name") or work_order_directory_name(record))
+    target = output_parent / safe_name(folder_name, 160)
+    if target.exists():
+        raise FileExistsError(f"目标变更目录已存在，为避免覆盖已停止生成：{target}")
+    output_parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.TemporaryDirectory(prefix=".b24-package-", dir=output_parent) as temporary:
+            staged = Path(temporary) / folder_name
+            staged.mkdir()
+            cad_folder = staged / "word&CAD"
+            cad_folder.mkdir()
+            named_approval_docx = cad_folder / f"{folder_name}.docx"
+            named_approval_docx.write_bytes(reviewed_docx)
+            _copy_source_files(source_drawings, cad_folder)
+            pdf_path = staged / f"{folder_name}.pdf"
+            with tempfile.NamedTemporaryFile(dir=staged, suffix=".pdf", delete=False) as handle:
+                temporary_pdf = Path(handle.name)
+            try:
+                temporary_pdf.write_bytes(reviewed_pdf)
+                temporary_pdf.replace(pdf_path)
+            finally:
+                temporary_pdf.unlink(missing_ok=True)
+            files = sorted(path.relative_to(staged).as_posix() for path in staged.rglob("*") if path.is_file())
+            staged.replace(target)
+    except Exception:
+        for empty_directory in (output_parent, output_parent.parent):
+            try:
+                empty_directory.rmdir()
+            except OSError:
+                pass
+        raise
+    return target, files
 
 
 def _same_file(first: Path, second: Path) -> bool:
@@ -193,19 +481,25 @@ def _word_to_pdf(source: Path, destination: Path) -> None:
 
     pythoncom.CoInitialize()
     word = None
-    document = None
     try:
         word = win32com.client.DispatchEx("Word.Application")
         word.Visible = False
         word.DisplayAlerts = 0
+        _export_word_to_pdf(word, source, destination)
+    finally:
+        if word is not None:
+            word.Quit()
+        pythoncom.CoUninitialize()
+
+
+def _export_word_to_pdf(word, source: Path, destination: Path) -> None:
+    document = None
+    try:
         document = word.Documents.Open(str(source.resolve()), ReadOnly=True)
         document.ExportAsFixedFormat(str(destination.resolve()), 17)
     finally:
         if document is not None:
             document.Close(False)
-        if word is not None:
-            word.Quit()
-        pythoncom.CoUninitialize()
 
 
 def merge_pdfs(approval_docx: Path, preview: dict, folder: Path) -> list[str]:

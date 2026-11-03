@@ -248,6 +248,21 @@ class WorkflowTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "请选择当前变更"):
             self.state.action(self.first_id, "merge", ["outside.pdf"])
 
+    def test_cancelled_draft_releases_change_number(self) -> None:
+        current = {"draft_id": "current", "status": "草稿", "created_at": "2026-11-02T11:00:00+08:00",
+                   "建议专业": "给排水", "建议编号": "05-03-C2-005",
+                   "人工确认": {"专业": "给排水", "编号": "05-03-C2-005"},
+                   "PDF预览哈希": "old", "PDF预览页数": 1,
+                   "灰度测试包": {"路径": "old"}}
+        self.state.work_order_store["drafts"] = [
+            {"draft_id": "cancelled", "status": "已取消", "建议编号": "05-03-C2-004"}, current,
+        ]
+        self.state._reconcile_draft_numbers()
+        self.assertEqual(current["建议编号"], "05-03-C2-003")
+        self.assertEqual(current["人工确认"]["编号"], "05-03-C2-003")
+        self.assertNotIn("PDF预览哈希", current)
+        self.assertNotIn("灰度测试包", current)
+
 
 if __name__ == "__main__":
     unittest.main()

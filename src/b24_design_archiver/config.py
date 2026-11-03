@@ -60,7 +60,10 @@ def load_config() -> dict:
         "work_order_json",
         "${CLOUDSTATION_ROOT}/path/to/work-order-data.json",
     )
-    for key in ("workbook", "template_before", "template_after", "output_root", "work_order_json"):
+    app.setdefault("work_order_snapshot_json", "${PROJECT_ROOT}/work-order-data.json")
+    app.setdefault("template_notice", "${PROJECT_ROOT}/B24_设计变更通知单_模板.docx")
+    app["template_notice"] = _expand(app["template_notice"])
+    for key in ("workbook", "template_before", "template_after", "output_root", "work_order_json", "work_order_snapshot_json"):
         app[key] = _expand(app[key])
     sources = [_expand(value) for value in app["source_directories"]]
     for raw in app.get("legacy_config_files", []):

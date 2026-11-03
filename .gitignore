@@ -7,7 +7,9 @@ common.env
 .env
 *.pyc
 local_settings.json
+work-order-data.json
 config.yaml
 LOCAL_AI_RUNTIME_SETUP.md
 tmp/
 input/
+*.docx

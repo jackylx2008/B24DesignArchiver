@@ -34,7 +34,41 @@ from logging_config import configure_utf8_stdio, setup_logger
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
+from b24_design_archiver.config import load_config  # noqa: E402
 from b24_design_archiver.server import ArchiveState, create_server  # noqa: E402
+
+
+def refresh_hotel_work_orders(logger) -> None:
+    """Rebuild the canonical hotel work-order JSON before loading the app."""
+    config = load_config()
+    source_path = Path(config["work_order_json"])
+    collator_root = Path(os.environ.get(
+        "MULTIDOCU_COLLATOR_ROOT", ROOT.parent / "MultiDocuCollator",
+    )).expanduser().resolve()
+    builder = collator_root / "build_archive.py"
+    if not builder.is_file():
+        logger.warning("酒店联系单刷新程序不存在，使用现有 JSON：%s", builder)
+        return
+    if not source_path.parent.is_dir():
+        logger.warning("酒店联系单资料目录不存在，跳过刷新：%s", source_path.parent)
+        return
+    try:
+        result = subprocess.run(
+            [sys.executable, str(builder), "--data-root", str(source_path.parent)],
+            cwd=collator_root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=300, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        logger.exception("启动时刷新酒店工作联系单失败，将尝试使用已有 JSON：%s", exc)
+        return
+    if result.stdout.strip():
+        logger.info("酒店工作联系单刷新结果：%s", result.stdout.strip())
+    if result.stderr.strip():
+        logger.warning("酒店工作联系单刷新提示：%s", result.stderr.strip())
+    if result.returncode:
+        logger.error("酒店工作联系单刷新失败（退出码 %d），将尝试使用已有 JSON", result.returncode)
+    else:
+        logger.info("酒店工作联系单 JSON 已在启动时重新扫描：%s", source_path)
 
 
 def _chrome_path() -> Path | None:
@@ -144,6 +178,7 @@ def main() -> None:
     args = parser.parse_args()
     configure_utf8_stdio()
     logger = setup_logger()
+    refresh_hotel_work_orders(logger)
     state = ArchiveState()
     server = create_server(state)
     url = f"http://127.0.0.1:{server.server_port}/"

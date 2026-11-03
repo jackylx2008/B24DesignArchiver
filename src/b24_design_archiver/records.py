@@ -110,7 +110,7 @@ def write_record_json(record: dict[str, str], output_root: Path) -> dict:
     folder = record_directory(record, output_root)
     folder.mkdir(parents=True, exist_ok=True)
     item = {EXPORT_NAMES.get(key, key): value for key, value in record.items()
-            if key not in {"审批表编号", "何种专业四"}}
+            if key not in {"审批表编号", "何种专业四", "_folder_name"}}
     copied = sorted(path.relative_to(folder).as_posix() for path in folder.rglob("*")
                     if path != folder / "record.json" and filesystem_path(path).is_file())
     item["已复制资料"] = bool(copied)
