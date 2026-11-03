@@ -20,9 +20,9 @@ from urllib.parse import urlparse
 from .config import PROJECT_ROOT, load_config
 from .operations import (
     append_work_order_appendices, build_work_order_change_package, copy_materials, generate_approval,
-    merge_pdfs, pdf_page_count, record_directory, remove_blank_pdf_pages,
+    desktop_directory, merge_pdfs, pdf_page_count, record_directory, remove_blank_pdf_pages,
     render_work_order_notice_artifacts, safe_name, work_order_directory_name, zip_materials,
-    zip_selected_folders,
+    zip_selected_records,
 )
 from .records import append_record_remark, load_records, update_progress_fields, write_record_json, write_records_json
 from .progress_ai import STATES, classify_progress, local_ai_status
@@ -1324,10 +1324,14 @@ def create_server(state: ArchiveState) -> ThreadingHTTPServer:
                         ids = body.get("ids")
                         if not isinstance(ids, list) or not ids:
                             raise ValueError("请先选择至少一条变更")
-                        folders = [state.folder(state.get_record(str(item))) for item in ids]
-                        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        destination = state.output_root() / f"B24已选变更_{stamp}.zip"
-                        self._json({"file": str(zip_selected_folders(folders, destination))})
+                        records = []
+                        for item in ids:
+                            record = state.get_record(str(item))
+                            records.append((record, state.folder(record)))
+                        destination = desktop_directory() / "1111"
+                        files = zip_selected_records(records, destination)
+                        self._json({"files": [str(path) for path in files], "count": len(files),
+                                    "destination": str(destination)})
                     else:
                         self._json({"error": "接口不存在"}, 404)
             except Exception as exc:

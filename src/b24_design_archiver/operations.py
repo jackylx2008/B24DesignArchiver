@@ -10,6 +10,7 @@ import shutil
 import tempfile
 import time
 import zipfile
+import uuid
 from datetime import date
 from pathlib import Path
 
@@ -457,6 +458,70 @@ def zip_directory(source: Path, destination: Path) -> None:
         temporary.replace(destination)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def desktop_directory() -> Path:
+    """Return the user's actual Desktop path, including redirected Windows desktops."""
+    if os.name == "nt":
+        try:
+            import winreg
+
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders") as key:
+                desktop, _ = winreg.QueryValueEx(key, "Desktop")
+            expanded = Path(os.path.expandvars(desktop)).expanduser()
+            if expanded.is_absolute():
+                return expanded
+        except (OSError, ImportError):
+            pass
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class GUID(ctypes.Structure):
+                _fields_ = [("Data1", wintypes.DWORD), ("Data2", wintypes.WORD),
+                            ("Data3", wintypes.WORD), ("Data4", ctypes.c_ubyte * 8)]
+
+            folder_id = GUID.from_buffer_copy(uuid.UUID("B4BFCC3A-DB2C-424C-B029-7FE99A87C641").bytes_le)
+            path = wintypes.LPWSTR()
+            get_folder = ctypes.windll.shell32.SHGetKnownFolderPath
+            get_folder.argtypes = [ctypes.POINTER(GUID), wintypes.DWORD, wintypes.HANDLE,
+                                   ctypes.POINTER(wintypes.LPWSTR)]
+            get_folder.restype = wintypes.HRESULT
+            result = get_folder(ctypes.byref(folder_id), 0, None, ctypes.byref(path))
+            if result == 0 and path:
+                try:
+                    return Path(path.value)
+                finally:
+                    free_memory = ctypes.windll.ole32.CoTaskMemFree
+                    free_memory.argtypes = [ctypes.c_void_p]
+                    free_memory(path)
+        except Exception:
+            pass
+    return Path.home() / "Desktop"
+
+
+def zip_selected_records(records: list[tuple[dict, Path]], destination: Path) -> list[Path]:
+    """Write one ZIP per selected change into destination, named by code and description."""
+    if not records:
+        raise ValueError("请先选择至少一条变更")
+    missing = [str(folder) for _, folder in records if not folder.is_dir()]
+    if missing:
+        raise ValueError("以下变更没有成果目录，未能打包：" + "；".join(missing))
+    destination.mkdir(parents=True, exist_ok=True)
+    outputs = []
+    used_names = set()
+    for record, folder in records:
+        code = str(record.get("变更通知单编号", "")).strip()
+        label = str(record.get("变更编号和说明", "")).strip() or code
+        name = safe_name(label, 180)
+        if name in used_names:
+            name = safe_name(f"{name}_{code}", 180)
+        used_names.add(name)
+        output = destination / f"{name}.zip"
+        zip_directory(folder, output)
+        outputs.append(output)
+    return outputs
 
 
 def zip_materials(preview: dict, folder: Path) -> list[str]:
