@@ -28,7 +28,7 @@ from .records import append_record_remark, load_records, update_progress_fields,
 from .progress_ai import STATES, classify_progress, local_ai_status
 from .sources import SourceIndex
 from .work_orders import (
-    CODE_PATTERNS, STORE_NAME, candidates_for, compare_text_segments, draft_merged_change,
+    CODE_PATTERNS, NUMBERING_RULES, STORE_NAME, candidates_for, compare_text_segments, draft_merged_change,
     load_store, load_work_order_records, next_change_number_options, proofread_change_content,
     refresh_project_work_order_json,
     recommend_matches, save_store,
@@ -243,56 +243,72 @@ class ArchiveState:
         return drawings, words, appendix_pdfs
 
     def _numbering_records(self, exclude_draft_id: str = "") -> list[dict]:
-        records = list(self.records)
-        for draft in self.work_order_store.get("drafts", []):
-            if draft.get("status") != "草稿" or draft.get("draft_id") == exclude_draft_id:
+        """Use numbers with a real output directory; draft suggestions never reserve numbers."""
+        root = self.output_root()
+        records = []
+        if not root.is_dir():
+            return records
+        for folder in root.iterdir():
+            if not folder.is_dir():
                 continue
-            code = str(draft.get("建议编号") or draft.get("人工确认", {}).get("编号", "")).strip()
+            code = ""
+            record_path = folder / "record.json"
+            if record_path.is_file():
+                try:
+                    record = json.loads(record_path.read_text(encoding="utf-8-sig"))
+                    code = str(record.get("变更通知单编号", "")).strip()
+                except (OSError, ValueError):
+                    pass
+            if not code:
+                for _, pattern in NUMBERING_RULES:
+                    raw_pattern = pattern.pattern.removeprefix("^").removesuffix("$")
+                    match = re.match(rf"({raw_pattern})(?=$|[（(_ ])", folder.name, re.IGNORECASE)
+                    if match:
+                        code = match.group(0)
+                        break
             if code:
                 records.append({"变更通知单编号": code})
         return records
 
     def _reconcile_draft_numbers(self) -> None:
-        """Reassign active drafts in creation order after a draft releases a number."""
-        assigned = list(self.records)
-        active = [draft for draft in self.work_order_store.get("drafts", [])
-                  if draft.get("status") == "草稿"]
-        active.sort(key=lambda draft: str(draft.get("created_at", "")))
+        """Remove cached numbers; active draft numbers are calculated for display."""
         changed = False
-        for draft in active:
-            options = next_change_number_options(assigned)
-            specialty = str(draft.get("人工确认", {}).get("专业")
-                            or draft.get("建议专业", "")).strip()
-            next_code = next((item["下一编号"] for item in options
-                              if item["专业"] == specialty), "")
-            if draft.get("编号选项") != options:
-                draft["编号选项"] = options
+        for draft in self.work_order_store.get("drafts", []):
+            if draft.get("status") == "已纳入页面":
+                continue
+            draft_changed = False
+            if draft.pop("建议编号", None) is not None:
+                draft_changed = True
+            if draft.pop("编号选项", None) is not None:
+                draft_changed = True
+            confirmed = draft.get("人工确认", {})
+            if confirmed.get("编号"):
+                confirmed["编号"] = ""
+                draft_changed = True
+            if draft_changed:
+                for key in ("PDF预览哈希", "PDF预览页数", "PDF预览时间", "灰度测试包"):
+                    draft.pop(key, None)
+                draft_id = str(draft.get("draft_id", ""))
+                self.work_order_preview_pdfs.pop(draft_id, None)
+                self.work_order_preview_docxs.pop(draft_id, None)
                 changed = True
-            if next_code:
-                old_code = str(draft.get("人工确认", {}).get("编号")
-                               or draft.get("建议编号", "")).strip()
-                if old_code != next_code or draft.get("建议编号") != next_code:
-                    draft["建议编号"] = next_code
-                    confirmed = draft.setdefault("人工确认", {})
-                    if confirmed.get("编号"):
-                        confirmed["编号"] = next_code
-                    for key in ("PDF预览哈希", "PDF预览页数", "PDF预览时间", "灰度测试包"):
-                        draft.pop(key, None)
-                    draft_id = str(draft.get("draft_id", ""))
-                    self.work_order_preview_pdfs.pop(draft_id, None)
-                    self.work_order_preview_docxs.pop(draft_id, None)
-                    changed = True
-                assigned.append({"变更通知单编号": next_code})
         if changed:
             save_store(self.work_order_store_path, self.work_order_store)
 
+    def _draft_with_numbering(self, draft: dict) -> dict:
+        """Attach the current suggested code to a response without persisting it."""
+        result = copy.deepcopy(draft)
+        if draft.get("status") != "草稿":
+            return result
+        options = next_change_number_options(self._numbering_records(exclude_draft_id=draft.get("draft_id", "")))
+        specialty = str(draft.get("人工确认", {}).get("专业") or draft.get("建议专业", "")).strip()
+        result["编号选项"] = options
+        result["建议编号"] = next((item["下一编号"] for item in options if item["专业"] == specialty), "")
+        return result
+
     def _work_order_draft_code_reserved(self, code: str, exclude_draft_id: str = "") -> bool:
-        return any(
-            draft.get("draft_id") != exclude_draft_id
-            and draft.get("status") in {"草稿", "已纳入页面"}
-            and str(draft.get("人工确认", {}).get("编号") or draft.get("建议编号", "")).strip().upper() == code.strip().upper()
-            for draft in self.work_order_store.get("drafts", [])
-        )
+        return any(str(record.get("变更通知单编号", "")).strip().upper() == code.strip().upper()
+                   for record in self._numbering_records(exclude_draft_id=exclude_draft_id))
 
     def set_output_root(self, raw: str) -> str:
         if not raw.strip():
@@ -401,7 +417,7 @@ class ArchiveState:
             "columns": ["专业", "编号", "日期", "致送单位", "主题", "需求内容",
                         "对应的变更", "是否需要转化为变更", "是否已经转化为变更", "是否已出变更联系单", "是否有草稿"],
             "changes": changes,
-            "drafts": drafts,
+            "drafts": [self._draft_with_numbering(draft) for draft in drafts],
             "specialties": sorted({str(record.get("专业", record.get("何种专业四", ""))).strip() for record in self.records
                                     if str(record.get("专业", record.get("何种专业四", ""))).strip()} |
                                    {str(item.get("discipline", "")).strip() for item in self.work_orders
@@ -556,7 +572,10 @@ class ArchiveState:
         draft = draft_merged_change(
             selected, self._numbering_records(), self.config, self._latest_real_change_date(),
         )
-        self.work_order_store.setdefault("drafts", []).append(draft)
+        saved_draft = copy.deepcopy(draft)
+        saved_draft.pop("建议编号", None)
+        saved_draft.pop("编号选项", None)
+        self.work_order_store.setdefault("drafts", []).append(saved_draft)
         for work_order_id in unique_ids:
             relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
             relation.update({"review_status": "新变更草稿", "draft_id": draft["draft_id"]})
@@ -581,11 +600,8 @@ class ArchiveState:
         fixed_date = str(draft.get("固定真实变更日期", "")).strip()
         if not fixed_date or values["日期"] != fixed_date:
             raise ValueError(f"新变更日期固定为最后一条真实变更日期：{fixed_date or '未设置'}")
-        valid_number = next((item["下一编号"] for item in draft.get("编号选项", [])
-                             if item.get("专业") == values["专业"]), "")
-        if not valid_number:
-            valid_number = next((item["下一编号"] for item in next_change_number_options(
-                self._numbering_records(exclude_draft_id=draft_id)) if item["专业"] == values["专业"]), "")
+        valid_number = next((item["下一编号"] for item in next_change_number_options(
+            self._numbering_records(exclude_draft_id=draft_id)) if item["专业"] == values["专业"]), "")
         if values["编号"] != valid_number:
             raise ValueError("编号必须按所选专业的现有编号顺延生成，请重新选择专业")
         if values["专业"] not in CODE_PATTERNS:
@@ -791,11 +807,8 @@ class ArchiveState:
         reviewed_docx = self.work_order_preview_docxs.get(draft_id)
         if not reviewed_pdf or not reviewed_docx:
             raise ValueError("当前 PDF 或其 Word 原件已失效，请重新渲染并审核整张变更单")
-        valid_number = next((item["下一编号"] for item in draft.get("编号选项", [])
-                             if item.get("专业") == confirmed["专业"]), "")
-        if not valid_number:
-            valid_number = next((item["下一编号"] for item in next_change_number_options(
-                self._numbering_records(exclude_draft_id=draft_id)) if item["专业"] == confirmed["专业"]), "")
+        valid_number = next((item["下一编号"] for item in next_change_number_options(
+            self._numbering_records(exclude_draft_id=draft_id)) if item["专业"] == confirmed["专业"]), "")
         if confirmed["编号"] != valid_number:
             raise ValueError("变更编号必须使用所选专业现有编号顺延生成的编号")
         if self._work_order_draft_code_reserved(confirmed["编号"], exclude_draft_id=draft_id):
@@ -863,14 +876,17 @@ class ArchiveState:
             raise ValueError(f"新变更日期固定为最后一条真实变更日期：{fixed_date}")
         if fixed_date:
             confirmed["日期"] = fixed_date
+        confirmed["编号"] = ""
         draft["人工确认"] = confirmed
+        draft.pop("建议编号", None)
+        draft.pop("编号选项", None)
         draft.pop("PDF预览哈希", None)
         draft.pop("PDF预览时间", None)
         draft["草稿更新时间"] = datetime.now().astimezone().isoformat(timespec="seconds")
         save_store(self.work_order_store_path, self.work_order_store)
         self.work_order_preview_pdfs.pop(draft_id, None)
         self.work_order_preview_docxs.pop(draft_id, None)
-        return draft
+        return self._draft_with_numbering(draft)
 
     def cancel_work_order_draft(self, draft_id: str) -> dict:
         draft = next((item for item in self.work_order_store.get("drafts", []) if item.get("draft_id") == draft_id), None)
@@ -908,17 +924,19 @@ class ArchiveState:
             shutil.rmtree(folder)
         draft["status"] = "草稿"
         draft.pop("确认状态", None)
+        draft.setdefault("人工确认", {})["编号"] = ""
+        draft.pop("建议编号", None)
+        draft.pop("编号选项", None)
         for key in ("目录名", "输出目录", "输出PDF", "输出目录文件", "复制DWG", "confirmed_at"):
             draft.pop(key, None)
         for work_order_id in draft.get("source_record_ids", []):
             relation = self.work_order_store.setdefault("relations", {}).setdefault(work_order_id, {})
             relation["change_ids"] = [value for value in relation.get("change_ids", []) if value != f"work-order:{draft_id}"]
-            relation.pop("draft_id", None)
-            relation["review_status"] = "待人工审核"
+            relation.update({"draft_id": draft_id, "review_status": "新变更草稿"})
         save_store(self.work_order_store_path, self.work_order_store)
         self._reconcile_draft_numbers()
         self.reload()
-        return draft
+        return self._draft_with_numbering(draft)
 
     def delete_work_order_drafts_for_records(self, record_ids: list[str]) -> dict:
         selected_ids = set(record_ids)

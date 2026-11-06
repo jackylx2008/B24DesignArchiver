@@ -231,7 +231,7 @@ def draft_merged_change(work_orders: list[dict], changes: list[dict], config: di
         "变更内容需要归纳、缩写选中联系单的要求，只保留设计变更必须明确的技术做法、范围、材料和施工要求，"
         "不得逐字完整复制联系单；控制篇幅，使审批表变更内容与其余字段能够完整排在一张 A4 页面内。"
         "表达简洁但不得遗漏关键技术参数和边界条件。"
-        "不要生成或修改编号，编号由程序根据相应专业的现有最后编号顺延生成。"
+        "不要生成或修改编号，编号由程序按现有记录为相应专业分配第一个未占用序号。"
         "只返回 JSON，字段：title、content、specialty、date、reason。"
     )
     result = _chat_json(config, prompt, json.dumps({
@@ -311,7 +311,8 @@ def compare_text_segments(original: str, revised: str) -> tuple[list[dict], list
 
 
 def next_change_number_options(changes: list[dict]) -> list[dict]:
-    """Return one next sequential code per profession found in existing change codes."""
+    """Return the first unused sequential code per profession in existing records."""
+    used: dict[str, set[int]] = {}
     latest: dict[str, tuple[int, int, str, int]] = {}
     for index, item in enumerate(changes):
         code = _change_code(item).strip()
@@ -327,6 +328,7 @@ def next_change_number_options(changes: list[dict]) -> list[dict]:
                 prefix = match.group(1)
                 serial = int(match.group(2))
                 width = len(match.group(2))
+            used.setdefault(specialty, set()).add(serial)
             previous = latest.get(specialty)
             if previous is None or (serial, index) >= (previous[0], previous[1]):
                 latest[specialty] = (serial, index, prefix, width)
@@ -335,8 +337,12 @@ def next_change_number_options(changes: list[dict]) -> list[dict]:
     for specialty, _ in NUMBERING_RULES:
         if specialty not in latest:
             continue
-        serial, _, prefix, width = latest[specialty]
-        result.append({"专业": specialty, "下一编号": f"{prefix}{str(serial + 1).zfill(max(3, width))}"})
+        _, _, prefix, width = latest[specialty]
+        serial = 1
+        occupied = used[specialty]
+        while serial in occupied:
+            serial += 1
+        result.append({"专业": specialty, "下一编号": f"{prefix}{str(serial).zfill(max(3, width))}"})
     return result
 
 
